@@ -24,7 +24,6 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 
-
 # --- CONFIGURACIÓN DE GOOGLE SHEETS ---
 # IMPORTANTE: Estas URLs deben estar limpias, sin corchetes extraños
 # ASÍ DEBE QUEDAR (Limpio):
@@ -33,6 +32,30 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive"
 ]
 
+def get_google_sheet_client():
+    try:
+        # Cargamos las credenciales desde los secretos de Streamlit
+        creds_dict = st.secrets["gcp_service_account"]
+        credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        client = gspread.authorize(credentials)
+        return client
+    except Exception as e:
+        st.error(f"Error de autenticación: {e}")
+        return None
+
+def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
+    client = get_google_sheet_client()
+    if not client: return False
+
+    try:
+        try:
+            sh = client.open(file_name)
+            worksheet = sh.sheet1
+        except gspread.SpreadsheetNotFound:
+            st.info(f"Creando archivo '{file_name}' en Drive...")
+            sh = client.create(file_name)
+            sh.share(st.secrets["admin_email"], perm_type='user', role='writer')
+            worksheet = sh.sheet1
 def get_google_sheet_client():
     try:
         # Cargamos las credenciales desde los secretos de Streamlit
@@ -147,48 +170,30 @@ else:
     # Vista para el USUARIO REGISTRADO (Admin)
     st.sidebar.markdown(f"### 👤 Usuario: **{usuario.capitalize()}**")
     
-    # GENERADOR DE QR MEJORADO
+    # GENERADOR DE QR AUTOMÁTICO
     with st.sidebar.expander("📱 Generar QR para Asistentes", expanded=True):
-        st.write("Crea un QR para que otros llenen el formulario bajo tu nombre.")
+        st.write("Escanea para registrarte con este usuario.")
         
-        # IMPORTANTE: Instrucción clara para el usuario
-        st.caption("👇 Copia la dirección que ves arriba en tu navegador y pégala aquí:")
+        # URL fija para automatización
+        base_url = "[https://registro-ciudadano-app.streamlit.app](https://registro-ciudadano-app.streamlit.app)"
         
-        # Dejamos el campo vacío o con un placeholder claro
-        base_url = st.text_input(
-            "URL de la Aplicación:", 
-            placeholder="Ej: [https://mi-app.streamlit.app](https://mi-app.streamlit.app)"
-        )
+        link_registro = f"{base_url}?ref={usuario}"
         
-        if base_url:
-            # Limpieza básica de la URL
-            base_url = base_url.strip().rstrip("/")
+        # Generar imagen QR
+        try:
+            qr = qrcode.QRCode(box_size=10, border=4)
+            qr.add_data(link_registro)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
             
-            # Verificar si parece correcta
-            if "streamlit.app" not in base_url and "localhost" not in base_url:
-                st.warning("⚠️ La URL parece extraña. Asegúrate de que termine en .streamlit.app")
+            # Convertir a bytes para mostrar
+            buf = BytesIO()
+            img.save(buf, format="PNG")
+            byte_im = buf.getvalue()
             
-            link_registro = f"{base_url}?ref={usuario}"
-            
-            # Generar imagen QR
-            try:
-                qr = qrcode.QRCode(box_size=10, border=4)
-                qr.add_data(link_registro)
-                qr.make(fit=True)
-                img = qr.make_image(fill_color="black", back_color="white")
-                
-                # Convertir a bytes para mostrar
-                buf = BytesIO()
-                img.save(buf, format="PNG")
-                byte_im = buf.getvalue()
-                
-                st.image(byte_im, caption=f"QR para invitados de {usuario}", use_column_width=True)
-                st.success("✅ QR generado. ¡Escanéalo para probar!")
-                st.code(link_registro, language="text") # Mostrar el link generado
-            except Exception as e:
-                st.error(f"Error generando QR: {e}")
-        else:
-            st.info("👈 Pega la URL de tu navegador arriba para ver el QR.")
+            st.image(byte_im, caption=f"Invitación de {usuario}", use_column_width=True)
+        except Exception as e:
+            st.error(f"Error generando QR: {e}")
 
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state.logged_in = False
