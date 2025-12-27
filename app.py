@@ -17,69 +17,105 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- ESTILOS VISUALES (BLANCO Y ROSADO) ---
-# Se ha actualizado la paleta de colores:
-# Fondo: Blanco (#FFFFFF)
-# Color Principal (Botones/Títulos): Rosado (#E91E63 y variantes)
-# Sidebar: Rosado muy pálido para diferenciar (#FCE4EC)
+# --- ESTILOS VISUALES (FORZADO MODO CLARO) ---
+# Se usan reglas CSS con !important para anular el "Modo Oscuro" del sistema del usuario
+# y garantizar que la app siempre se vea blanca y rosada.
 
 st.markdown("""
     <style>
-    /* Fondo principal blanco */
+    /* --- FORZAR FONDO Y TEXTO GLOBAL --- */
     .stApp {
-        background-color: #FFFFFF;
+        background-color: #FFFFFF !important;
+        color: #333333 !important;
     }
     
-    /* Color de Títulos y Encabezados */
+    /* Forzar color de texto en párrafos y etiquetas (para que no se vuelvan blancos en modo oscuro) */
+    p, label, .stMarkdown, .stText, h1, h2, h3, h4, h5, h6 {
+        color: #333333 !important;
+    }
+
+    /* --- TÍTULOS ESPECÍFICOS --- */
     h1, h2, h3 { 
         color: #D81B60 !important; 
         text-align: center; 
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     }
     
-    /* Estilo de los Botones (Rosado) */
+    /* --- INPUTS (CAMPOS DE TEXTO) --- */
+    /* Aseguramos fondo blanco y texto oscuro en los inputs */
+    .stTextInput input, .stSelectbox div[data-baseweb="select"], .stTextArea textarea {
+        background-color: #FFFFFF !important;
+        color: #333333 !important;
+        border: 1px solid #ced4da !important;
+    }
+    
+    /* Texto dentro de los inputs al escribir */
+    .stTextInput > div > div > input {
+        color: #333333 !important;
+    }
+
+    /* Borde rosado al hacer clic en un campo */
+    .stTextInput input:focus, .stTextArea textarea:focus {
+        border-color: #E91E63 !important;
+        box-shadow: 0 0 0 1px #E91E63 !important;
+    }
+    
+    /* Etiquetas de los inputs (Labels) */
+    .stTextInput label, .stSelectbox label {
+        color: #333333 !important;
+    }
+
+    /* --- BOTONES --- */
     .stButton>button { 
         width: 100%; 
-        background-color: #E91E63; 
-        color: white; 
+        background-color: #E91E63 !important; 
+        color: white !important; 
         border: none;
         border-radius: 8px;
         font-weight: bold;
         transition: all 0.3s ease;
     }
     
-    /* Efecto Hover en Botones (Oscurecer un poco al pasar el mouse) */
     .stButton>button:hover {
-        background-color: #C2185B;
-        color: white;
+        background-color: #C2185B !important;
+        color: white !important;
         box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
     
-    /* Personalización del Sidebar (Fondo rosado muy suave) */
+    /* --- BARRA LATERAL (SIDEBAR) --- */
     [data-testid="stSidebar"] {
-        background-color: #FCE4EC;
+        background-color: #FCE4EC !important;
     }
     
-    /* Mensajes de éxito (Verde suave para mantener semántica, pero con borde rosado opcional) */
+    /* Elementos dentro del sidebar */
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] .stMarkdown {
+        color: #880E4F !important;
+    }
+
+    /* --- MENSAJES Y ALERTAS --- */
     .stSuccess { 
-        background-color: #d4edda; 
-        color: #155724; 
+        background-color: #d4edda !important; 
+        color: #155724 !important; 
         padding: 10px; 
         border-radius: 5px;
         border-left: 5px solid #E91E63;
     }
     
-    /* Inputs de texto (Borde rosado al enfocar) */
-    input:focus {
-        border-color: #E91E63 !important;
-        box-shadow: 0 0 0 1px #E91E63 !important;
+    .stError {
+        background-color: #f8d7da !important;
+        color: #721c24 !important;
     }
     
-    /* Estilo para el modo invitado */
+    .stInfo {
+        background-color: #cce5ff !important;
+        color: #004085 !important;
+    }
+
+    /* --- ESTILO MODO INVITADO --- */
     .guest-banner {
         padding: 15px; 
-        background-color: #F8BBD0; /* Rosado pastel */
-        color: #880E4F; /* Texto vino tinto */
+        background-color: #F8BBD0; 
+        color: #880E4F !important; /* !important para forzar el color del texto */
         border-radius: 8px; 
         margin-bottom: 20px;
         text-align: center;
@@ -173,7 +209,7 @@ def check_session():
 
     # 3. Mostrar Pantalla de Login
     st.title("🔐 Acceso al Sistema")
-    st.markdown("<p style='text-align: center; color: #666;'>Ingrese sus credenciales para gestionar el registro.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #666 !important;'>Ingrese sus credenciales para gestionar el registro.</p>", unsafe_allow_html=True)
 
     with st.form("login_form"):
         user = st.text_input("Usuario").lower().strip()
