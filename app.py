@@ -17,21 +17,80 @@ st.set_page_config(
     layout="centered"
 )
 
-# Estilos visuales
+# --- ESTILOS VISUALES (BLANCO Y ROSADO) ---
+# Se ha actualizado la paleta de colores:
+# Fondo: Blanco (#FFFFFF)
+# Color Principal (Botones/Títulos): Rosado (#E91E63 y variantes)
+# Sidebar: Rosado muy pálido para diferenciar (#FCE4EC)
+
 st.markdown("""
     <style>
-    .main { background-color: #f8f9fa; }
-    h1 { color: #0f3460; text-align: center; }
-    .stButton>button { width: 100%; background-color: #0f3460; color: white; }
-    .stSuccess { background-color: #d4edda; color: #155724; padding: 10px; border-radius: 5px;}
+    /* Fondo principal blanco */
+    .stApp {
+        background-color: #FFFFFF;
+    }
+    
+    /* Color de Títulos y Encabezados */
+    h1, h2, h3 { 
+        color: #D81B60 !important; 
+        text-align: center; 
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }
+    
+    /* Estilo de los Botones (Rosado) */
+    .stButton>button { 
+        width: 100%; 
+        background-color: #E91E63; 
+        color: white; 
+        border: none;
+        border-radius: 8px;
+        font-weight: bold;
+        transition: all 0.3s ease;
+    }
+    
+    /* Efecto Hover en Botones (Oscurecer un poco al pasar el mouse) */
+    .stButton>button:hover {
+        background-color: #C2185B;
+        color: white;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* Personalización del Sidebar (Fondo rosado muy suave) */
+    [data-testid="stSidebar"] {
+        background-color: #FCE4EC;
+    }
+    
+    /* Mensajes de éxito (Verde suave para mantener semántica, pero con borde rosado opcional) */
+    .stSuccess { 
+        background-color: #d4edda; 
+        color: #155724; 
+        padding: 10px; 
+        border-radius: 5px;
+        border-left: 5px solid #E91E63;
+    }
+    
+    /* Inputs de texto (Borde rosado al enfocar) */
+    input:focus {
+        border-color: #E91E63 !important;
+        box-shadow: 0 0 0 1px #E91E63 !important;
+    }
+    
+    /* Estilo para el modo invitado */
+    .guest-banner {
+        padding: 15px; 
+        background-color: #F8BBD0; /* Rosado pastel */
+        color: #880E4F; /* Texto vino tinto */
+        border-radius: 8px; 
+        margin-bottom: 20px;
+        text-align: center;
+        border: 1px solid #F48FB1;
+    }
     </style>
     """, unsafe_allow_html=True)
 
 
 
 # --- CONFIGURACIÓN DE GOOGLE SHEETS ---
-# IMPORTANTE: Estas URLs deben estar limpias, sin corchetes extraños
-# ASÍ DEBE QUEDAR (Limpio):
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
@@ -59,9 +118,11 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
         except gspread.SpreadsheetNotFound:
             st.info(f"Creando archivo '{file_name}' en Drive...")
             sh = client.create(file_name)
-            sh.share(st.secrets["admin_email"], perm_type='user', role='writer')
+            # Asegúrate de que 'admin_email' exista en st.secrets o maneja el error
+            if "admin_email" in st.secrets:
+                sh.share(st.secrets["admin_email"], perm_type='user', role='writer')
             worksheet = sh.sheet1
-            # Ahora incluimos QUIÉN registró el dato
+            # Encabezados
             headers = ["Fecha Registro", "Registrado Por", "Nombre Completo", "Cédula", "Teléfono", 
                        "Ocupación", "Dirección", "Barrio", "Ciudad"]
             worksheet.append_row(headers)
@@ -86,13 +147,14 @@ def check_session():
     try:
         query_params = st.query_params
     except:
+        # Fallback para versiones antiguas de Streamlit
         query_params = st.experimental_get_query_params()
         
     ref_user = query_params.get("ref")
     
     # Si hay un referido en la URL, iniciamos sesión como invitado automáticamente
     if ref_user:
-        # Si es una lista (versiones viejas), sacamos el primer elemento
+        # Si es una lista (dependiendo de la versión de streamlit), sacamos el primer elemento
         if isinstance(ref_user, list):
             ref_user = ref_user[0]
             
@@ -111,7 +173,7 @@ def check_session():
 
     # 3. Mostrar Pantalla de Login
     st.title("🔐 Acceso al Sistema")
-    st.markdown("Por favor ingrese sus credenciales.")
+    st.markdown("<p style='text-align: center; color: #666;'>Ingrese sus credenciales para gestionar el registro.</p>", unsafe_allow_html=True)
 
     with st.form("login_form"):
         user = st.text_input("Usuario").lower().strip()
@@ -146,20 +208,20 @@ usuario = st.session_state.user_name
 
 if st.session_state.get("is_guest", False):
     # Vista para el ASISTENTE (Invitado)
-    st.sidebar.info(f"📋 Formulario de Registro\n\nResponsable: **{usuario.capitalize()}**")
+    st.sidebar.info(f"📋 Registro Activo\n\nResponsable: **{usuario.capitalize()}**")
 else:
     # Vista para el USUARIO REGISTRADO (Admin)
     st.sidebar.markdown(f"### 👤 Usuario: **{usuario.capitalize()}**")
     
     # GENERADOR DE QR CON BOTÓN
-    with st.sidebar.expander("📱 Generar QR para Asistentes", expanded=True):
-        st.write("Crea un QR para que otros llenen el formulario bajo tu nombre.")
+    with st.sidebar.expander("📱 Generar QR", expanded=True):
+        st.write("QR para asistentes:")
         
         # Campo de texto para la URL (por defecto usa BASE_URL)
-        url_input = st.text_input("URL Pública de la App:", value=BASE_URL)
+        url_input = st.text_input("URL App:", value=BASE_URL)
         
         # Botón para generar el QR
-        if st.button("Generar QR"):
+        if st.button("Generar Código QR"):
             # Limpiamos la URL
             clean_url = url_input.strip().rstrip("/")
             link_registro = f"{clean_url}?ref={usuario}"
@@ -169,17 +231,17 @@ else:
                 qr = qrcode.QRCode(box_size=10, border=4)
                 qr.add_data(link_registro)
                 qr.make(fit=True)
-                img = qr.make_image(fill_color="black", back_color="white")
+                img = qr.make_image(fill_color="#E91E63", back_color="white") # QR Rosado
                 
                 # Convertir a bytes para mostrar
                 buf = BytesIO()
                 img.save(buf, format="PNG")
                 byte_im = buf.getvalue()
                 
-                st.image(byte_im, caption=f"Invitación de {usuario}", use_column_width=True)
-                st.success("¡QR generado exitosamente!")
+                st.image(byte_im, caption=f"QR de {usuario}", use_column_width=True)
+                st.success("¡QR listo!")
             except Exception as e:
-                st.error(f"Error generando QR: {e}")
+                st.error(f"Error QR: {e}")
 
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state.logged_in = False
@@ -188,20 +250,22 @@ else:
         try:
             st.query_params.clear()
         except:
+            # Fallback para versiones antiguas
             st.experimental_set_query_params()
         st.rerun()
 
 # 3. Formulario Principal
-st.title("🗳️ Registro de Datos Ciudadanos")
+st.title("🗳️ Registro Ciudadano")
+
 if st.session_state.get("is_guest", False):
     st.markdown(f"""
-    <div style="padding:10px; background-color:#d1ecf1; color:#0c5460; border-radius:5px; margin-bottom:10px;">
+    <div class="guest-banner">
         👋 <b>Modo Invitado:</b> Estás registrando datos para: <b>{usuario.capitalize()}</b>
     </div>
     """, unsafe_allow_html=True)
 
 st.markdown("---")
-st.write("Complete el formulario para el registro en la base de datos centralizada.")
+st.write("Complete la información del ciudadano a continuación.")
 
 with st.form("registro_form", clear_on_submit=True):
     col1, col2 = st.columns(2)
