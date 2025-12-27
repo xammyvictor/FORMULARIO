@@ -153,7 +153,7 @@ else:
         st.write("Genera un QR para que los asistentes se registren ellos mismos bajo tu nombre.")
         # Detectar URL base automáticamente es difícil en Streamlit Cloud, mejor pedirla o dejar una default
         base_url = st.text_input("URL de tu App (copia del navegador):", 
-                                value="https://registro-ciudadano-app.streamlit.app")
+                                value="https://registro-ciudadano-app.streamlit.app",)
         
         if base_url:
             link_registro = f"{base_url}?ref={usuario}"
