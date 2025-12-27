@@ -2,3 +2,5 @@ streamlit
 pandas
 gspread
 google-auth
+qrcode
+Pillow
