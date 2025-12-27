@@ -3,6 +3,8 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import time
+import qrcode
+from io import BytesIO
 
 # Configuración de la página
 st.set_page_config(
@@ -19,6 +21,7 @@ st.markdown("""
     .stButton>button { width: 100%; background-color: #0f3460; color: white; }
     </style>
     """, unsafe_allow_html=True)
+
 
 
 # --- CONFIGURACIÓN DE GOOGLE SHEETS ---
@@ -72,15 +75,38 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
         st.error(f"Error al guardar: {e}")
         return False
 
-# --- SISTEMA DE LOGIN ---
-def login():
-    # Inicializar estado de login si no existe
+# --- SISTEMA DE LOGIN Y CONTROL DE SESIÓN ---
+def check_session():
+    # 1. Revisar si viene referido por QR (Invitado)
+    # Nota: st.query_params es la forma nueva, st.experimental_get_query_params la vieja. 
+    # Usamos la compatible.
+    try:
+        query_params = st.query_params
+    except:
+        query_params = st.experimental_get_query_params()
+        
+    ref_user = query_params.get("ref")
+    
+    # Si hay un referido en la URL, iniciamos sesión como invitado automáticamente
+    if ref_user:
+        # Si es una lista (versiones viejas), sacamos el primer elemento
+        if isinstance(ref_user, list):
+            ref_user = ref_user[0]
+            
+        st.session_state.logged_in = True
+        st.session_state.user_name = ref_user
+        st.session_state.is_guest = True # Marcamos que es invitado
+        return True
+
+    # 2. Si no es invitado, revisamos login normal
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
+        st.session_state.is_guest = False
     
     if st.session_state.logged_in:
         return True
 
+    # 3. Mostrar Pantalla de Login
     st.title("🔐 Acceso al Sistema")
     st.markdown("Por favor ingrese sus credenciales.")
 
@@ -100,6 +126,7 @@ def login():
             if user in credenciales and credenciales[user] == password:
                 st.session_state.logged_in = True
                 st.session_state.user_name = user
+                st.session_state.is_guest = False # Es admin/usuario real
                 st.rerun()
             else:
                 st.error("❌ Usuario o contraseña incorrectos")
@@ -107,18 +134,59 @@ def login():
 
 # --- FLUJO PRINCIPAL DE LA APP ---
 
-# 1. Verificar Login
-if not login():
+# 1. Verificar Login (o Referido QR)
+if not check_session():
     st.stop()
 
-# 2. Barra lateral con info de usuario
-st.sidebar.markdown(f"### 👤 Usuario: **{st.session_state.user_name.capitalize()}**")
-if st.sidebar.button("Cerrar Sesión"):
-    st.session_state.logged_in = False
-    st.rerun()
+# 2. Barra lateral (Diferente para Admin vs Invitado)
+usuario = st.session_state.user_name
 
-# 3. Formulario Principal (Solo visible si está logueado)
+if st.session_state.get("is_guest", False):
+    # Vista para el ASISTENTE (Invitado)
+    st.sidebar.info(f"📋 Formulario de Registro\n\nResponsable: **{usuario.capitalize()}**")
+else:
+    # Vista para el USUARIO REGISTRADO (Admin)
+    st.sidebar.markdown(f"### 👤 Usuario: **{usuario.capitalize()}**")
+    
+    # GENERADOR DE QR
+    with st.sidebar.expander("📱 Generar QR para Asistentes"):
+        st.write("Genera un QR para que los asistentes se registren ellos mismos bajo tu nombre.")
+        # Detectar URL base automáticamente es difícil en Streamlit Cloud, mejor pedirla o dejar una default
+        base_url = st.text_input("URL de tu App (copia del navegador):", 
+                                value="[https://registro-ciudadano-app.streamlit.app](https://registro-ciudadano-app.streamlit.app)")
+        
+        if base_url:
+            link_registro = f"{base_url}?ref={usuario}"
+            
+            # Generar imagen QR
+            qr = qrcode.QRCode(box_size=10, border=4)
+            qr.add_data(link_registro)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            # Convertir a bytes para mostrar
+            buf = BytesIO()
+            img.save(buf, format="PNG")
+            byte_im = buf.getvalue()
+            
+            st.image(byte_im, caption=f"QR para {usuario}", use_column_width=True)
+            st.caption("Pide al asistente que escanee este código.")
+
+    if st.sidebar.button("Cerrar Sesión"):
+        st.session_state.logged_in = False
+        st.session_state.is_guest = False
+        # Limpiar query params al salir para no volver a entrar auto
+        try:
+            st.query_params.clear()
+        except:
+            st.experimental_set_query_params()
+        st.rerun()
+
+# 3. Formulario Principal
 st.title("🗳️ Registro de Datos Ciudadanos")
+if st.session_state.get("is_guest", False):
+    st.info(f"👋 ¡Hola! Estás llenando este formulario invitado por: **{usuario.capitalize()}**")
+
 st.markdown("---")
 st.write("Complete el formulario para el registro en la base de datos centralizada.")
 
