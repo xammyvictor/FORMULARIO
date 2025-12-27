@@ -56,6 +56,30 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
             sh = client.create(file_name)
             sh.share(st.secrets["admin_email"], perm_type='user', role='writer')
             worksheet = sh.sheet1
+def get_google_sheet_client():
+    try:
+        # Cargamos las credenciales desde los secretos de Streamlit
+        creds_dict = st.secrets["gcp_service_account"]
+        credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        client = gspread.authorize(credentials)
+        return client
+    except Exception as e:
+        st.error(f"Error de autenticación: {e}")
+        return None
+
+def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
+    client = get_google_sheet_client()
+    if not client: return False
+
+    try:
+        try:
+            sh = client.open(file_name)
+            worksheet = sh.sheet1
+        except gspread.SpreadsheetNotFound:
+            st.info(f"Creando archivo '{file_name}' en Drive...")
+            sh = client.create(file_name)
+            sh.share(st.secrets["admin_email"], perm_type='user', role='writer')
+            worksheet = sh.sheet1
             # Ahora incluimos QUIÉN registró el dato
             headers = ["Fecha Registro", "Registrado Por", "Nombre Completo", "Cédula", "Teléfono", 
                        "Ocupación", "Dirección", "Barrio", "Ciudad"]
@@ -150,7 +174,7 @@ else:
     with st.sidebar.expander("📱 Generar QR para Asistentes", expanded=True):
         st.write("Escanea para registrarte con este usuario.")
         
-        # URL fija para automatización (SIN FORMATO MARKDOWN)
+        # URL fija para automatización
         base_url = "[https://registro-ciudadano-app.streamlit.app](https://registro-ciudadano-app.streamlit.app)"
         
         link_registro = f"{base_url}?ref={usuario}"
