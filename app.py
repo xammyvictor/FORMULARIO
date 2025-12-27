@@ -8,7 +8,7 @@ from io import BytesIO
 
 # --- CONFIGURACIÓN GENERAL ---
 # URL de tu aplicación (IMPORTANTE: Sin corchetes ni paréntesis extraños)
-BASE_URL = "[https://registro-ciudadano-app.streamlit.app](https://registro-ciudadano-app.streamlit.app)"
+BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
 
 # Configuración de la página
 st.set_page_config(
