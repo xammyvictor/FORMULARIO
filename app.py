@@ -20,6 +20,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+
 # --- CONFIGURACIÓN DE GOOGLE SHEETS ---
 # IMPORTANTE: Estas URLs deben estar limpias, sin corchetes extraños
 # ASÍ DEBE QUEDAR (Limpio):
@@ -52,13 +53,17 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
             sh = client.create(file_name)
             sh.share(st.secrets["admin_email"], perm_type='user', role='writer')
             worksheet = sh.sheet1
-            headers = ["Fecha Registro", "Nombre Completo", "Cédula", "Teléfono", 
+            # Ahora incluimos QUIÉN registró el dato
+            headers = ["Fecha Registro", "Registrado Por", "Nombre Completo", "Cédula", "Teléfono", 
                        "Ocupación", "Dirección", "Barrio", "Ciudad"]
             worksheet.append_row(headers)
 
         timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Obtenemos el usuario actual de la sesión
+        usuario_actual = st.session_state.get("user_name", "Desconocido")
+        
         row = [
-            timestamp, data_dict["nombre"], data_dict["cedula"], data_dict["telefono"],
+            timestamp, usuario_actual, data_dict["nombre"], data_dict["cedula"], data_dict["telefono"],
             data_dict["ocupacion"], data_dict["direccion"], data_dict["barrio"], data_dict["ciudad"]
         ]
         worksheet.append_row(row)
@@ -67,7 +72,52 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
         st.error(f"Error al guardar: {e}")
         return False
 
-# --- INTERFAZ DE USUARIO ---
+# --- SISTEMA DE LOGIN ---
+def login():
+    # Inicializar estado de login si no existe
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+    
+    if st.session_state.logged_in:
+        return True
+
+    st.title("🔐 Acceso al Sistema")
+    st.markdown("Por favor ingrese sus credenciales.")
+
+    with st.form("login_form"):
+        user = st.text_input("Usuario").lower().strip()
+        password = st.text_input("Contraseña", type="password")
+        submitted = st.form_submit_button("Ingresar")
+
+        if submitted:
+            # USUARIOS CONFIGURADOS
+            credenciales = {
+                "fabian": "1234",
+                "xammy": "1234",
+                "brayan": "1234"
+            }
+            
+            if user in credenciales and credenciales[user] == password:
+                st.session_state.logged_in = True
+                st.session_state.user_name = user
+                st.rerun()
+            else:
+                st.error("❌ Usuario o contraseña incorrectos")
+    return False
+
+# --- FLUJO PRINCIPAL DE LA APP ---
+
+# 1. Verificar Login
+if not login():
+    st.stop()
+
+# 2. Barra lateral con info de usuario
+st.sidebar.markdown(f"### 👤 Usuario: **{st.session_state.user_name.capitalize()}**")
+if st.sidebar.button("Cerrar Sesión"):
+    st.session_state.logged_in = False
+    st.rerun()
+
+# 3. Formulario Principal (Solo visible si está logueado)
 st.title("🗳️ Registro de Datos Ciudadanos")
 st.markdown("---")
 st.write("Complete el formulario para el registro en la base de datos centralizada.")
