@@ -17,55 +17,71 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- ESTILOS VISUALES (FORZADO MODO CLARO) ---
-# Se usan reglas CSS con !important para anular el "Modo Oscuro" del sistema del usuario
-# y garantizar que la app siempre se vea blanca y rosada.
-
+# --- ESTILOS VISUALES (FORZADO MODO CLARO COMPLETO) ---
 st.markdown("""
     <style>
-    /* --- FORZAR FONDO Y TEXTO GLOBAL --- */
+    /* 1. FORZAR FONDO Y TEXTO GLOBAL */
     .stApp {
         background-color: #FFFFFF !important;
         color: #333333 !important;
     }
     
-    /* Forzar color de texto en párrafos y etiquetas (para que no se vuelvan blancos en modo oscuro) */
-    p, label, .stMarkdown, .stText, h1, h2, h3, h4, h5, h6 {
+    /* 2. FORZAR ÍCONOS DE MENÚ Y HEADER (Corregir invisibilidad) */
+    header, [data-testid="stHeader"] {
+        background-color: #FFFFFF !important;
+    }
+    
+    /* Color de los iconos SVG (Hamburguesa, X de cerrar sidebar, 3 puntos) */
+    [data-testid="stHeader"] svg, [data-testid="stSidebarCollapsedControl"] svg, button[kind="header"] svg {
+        fill: #333333 !important;
+        color: #333333 !important;
+    }
+    /* Forzar color de texto en botones del header */
+    button[kind="header"] {
         color: #333333 !important;
     }
 
-    /* --- TÍTULOS ESPECÍFICOS --- */
+    /* 3. TÍTULOS Y TEXTOS */
     h1, h2, h3 { 
         color: #D81B60 !important; 
         text-align: center; 
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     }
-    
-    /* --- INPUTS (CAMPOS DE TEXTO) --- */
-    /* Aseguramos fondo blanco y texto oscuro en los inputs */
+    p, label, .stMarkdown, .stText, h4, h5, h6, .stHtml {
+        color: #333333 !important;
+    }
+
+    /* 4. INPUTS (CAMPOS DE TEXTO) */
     .stTextInput input, .stSelectbox div[data-baseweb="select"], .stTextArea textarea {
         background-color: #FFFFFF !important;
         color: #333333 !important;
         border: 1px solid #ced4da !important;
+        caret-color: #E91E63 !important; /* Color del cursor */
     }
     
-    /* Texto dentro de los inputs al escribir */
+    /* Placeholder (Texto gris cuando está vacío) */
+    ::placeholder {
+        color: #888888 !important;
+        opacity: 1 !important;
+    }
+    
+    /* Texto escrito dentro */
     .stTextInput > div > div > input {
         color: #333333 !important;
     }
 
-    /* Borde rosado al hacer clic en un campo */
+    /* Borde rosado al enfocar */
     .stTextInput input:focus, .stTextArea textarea:focus {
         border-color: #E91E63 !important;
         box-shadow: 0 0 0 1px #E91E63 !important;
     }
     
-    /* Etiquetas de los inputs (Labels) */
+    /* Etiquetas (Labels) */
     .stTextInput label, .stSelectbox label {
         color: #333333 !important;
     }
 
-    /* --- BOTONES --- */
+    /* 5. BOTONES */
     .stButton>button { 
         width: 100%; 
         background-color: #E91E63 !important; 
@@ -75,47 +91,53 @@ st.markdown("""
         font-weight: bold;
         transition: all 0.3s ease;
     }
-    
     .stButton>button:hover {
         background-color: #C2185B !important;
         color: white !important;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        border-color: #C2185B !important;
     }
     
-    /* --- BARRA LATERAL (SIDEBAR) --- */
+    /* 6. BARRA LATERAL (SIDEBAR) */
     [data-testid="stSidebar"] {
         background-color: #FCE4EC !important;
     }
-    
     /* Elementos dentro del sidebar */
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] .stMarkdown {
         color: #880E4F !important;
     }
+    /* Estilo del Expander en sidebar */
+    [data-testid="stSidebar"] .streamlit-expanderHeader {
+        color: #880E4F !important;
+        background-color: rgba(255,255,255,0.5) !important;
+    }
+    [data-testid="stSidebar"] .streamlit-expanderContent {
+        color: #333333 !important;
+    }
 
-    /* --- MENSAJES Y ALERTAS --- */
+    /* 7. MENSAJES Y ALERTAS */
     .stSuccess { 
         background-color: #d4edda !important; 
         color: #155724 !important; 
-        padding: 10px; 
-        border-radius: 5px;
         border-left: 5px solid #E91E63;
     }
-    
     .stError {
         background-color: #f8d7da !important;
         color: #721c24 !important;
     }
-    
     .stInfo {
         background-color: #cce5ff !important;
         color: #004085 !important;
     }
+    .stWarning {
+        background-color: #fff3cd !important;
+        color: #856404 !important;
+    }
 
-    /* --- ESTILO MODO INVITADO --- */
+    /* 8. MODO INVITADO */
     .guest-banner {
         padding: 15px; 
         background-color: #F8BBD0; 
-        color: #880E4F !important; /* !important para forzar el color del texto */
+        color: #880E4F !important; 
         border-radius: 8px; 
         margin-bottom: 20px;
         text-align: center;
