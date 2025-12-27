@@ -22,6 +22,7 @@ st.markdown("""
 
 # --- CONFIGURACIÓN DE GOOGLE SHEETS ---
 # IMPORTANTE: Estas URLs deben estar limpias, sin corchetes extraños
+# ASÍ DEBE QUEDAR (Limpio):
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
