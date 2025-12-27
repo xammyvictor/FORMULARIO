@@ -32,7 +32,6 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-
 def get_google_sheet_client():
     try:
         # Cargamos las credenciales desde los secretos de Streamlit
@@ -151,7 +150,7 @@ else:
     with st.sidebar.expander("📱 Generar QR para Asistentes", expanded=True):
         st.write("Escanea para registrarte con este usuario.")
         
-        # URL fija para automatización
+        # URL fija para automatización (SIN FORMATO MARKDOWN)
         base_url = "[https://registro-ciudadano-app.streamlit.app](https://registro-ciudadano-app.streamlit.app)"
         
         link_registro = f"{base_url}?ref={usuario}"
