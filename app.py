@@ -243,7 +243,8 @@ def check_session():
             credenciales = {
                 "fabian": "1234",
                 "xammy": "1234",
-                "brayan": "1234"
+                "brayan": "1234",
+                "arturo": "1234"
             }
             
             if user in credenciales and credenciales[user] == password:
