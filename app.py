@@ -32,30 +32,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-def get_google_sheet_client():
-    try:
-        # Cargamos las credenciales desde los secretos de Streamlit
-        creds_dict = st.secrets["gcp_service_account"]
-        credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-        client = gspread.authorize(credentials)
-        return client
-    except Exception as e:
-        st.error(f"Error de autenticación: {e}")
-        return None
 
-def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
-    client = get_google_sheet_client()
-    if not client: return False
-
-    try:
-        try:
-            sh = client.open(file_name)
-            worksheet = sh.sheet1
-        except gspread.SpreadsheetNotFound:
-            st.info(f"Creando archivo '{file_name}' en Drive...")
-            sh = client.create(file_name)
-            sh.share(st.secrets["admin_email"], perm_type='user', role='writer')
-            worksheet = sh.sheet1
 def get_google_sheet_client():
     try:
         # Cargamos las credenciales desde los secretos de Streamlit
