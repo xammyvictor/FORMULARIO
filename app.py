@@ -62,7 +62,7 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
             worksheet.append_row(headers)
 
         timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-        # Obtenemos el usuario actual de la sesión
+        # Obtenemos el usuario actual de la sesión (Fabian, Xammy, etc.)
         usuario_actual = st.session_state.get("user_name", "Desconocido")
         
         row = [
@@ -78,8 +78,6 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
 # --- SISTEMA DE LOGIN Y CONTROL DE SESIÓN ---
 def check_session():
     # 1. Revisar si viene referido por QR (Invitado)
-    # Nota: st.query_params es la forma nueva, st.experimental_get_query_params la vieja. 
-    # Usamos la compatible.
     try:
         query_params = st.query_params
     except:
@@ -151,11 +149,17 @@ else:
     # GENERADOR DE QR
     with st.sidebar.expander("📱 Generar QR para Asistentes"):
         st.write("Genera un QR para que los asistentes se registren ellos mismos bajo tu nombre.")
-        # Detectar URL base automáticamente es difícil en Streamlit Cloud, mejor pedirla o dejar una default
-        base_url = st.text_input("URL de tu App (copia del navegador):", 
-                                value="https://registro-ciudadano-app.streamlit.app")
+        
+        # URL BASE - IMPORTANTE: URL LIMPIA SIN CORCHETES
+        base_url = st.text_input(
+            "URL Pública de la App:", 
+            value="[https://registro-ciudadano-app.streamlit.app](https://registro-ciudadano-app.streamlit.app)",
+            help="Usa la URL que termina en .streamlit.app"
+        )
         
         if base_url:
+            # Limpiamos la URL por si acaso tiene barra al final
+            base_url = base_url.rstrip("/")
             link_registro = f"{base_url}?ref={usuario}"
             
             # Generar imagen QR
@@ -169,8 +173,8 @@ else:
             img.save(buf, format="PNG")
             byte_im = buf.getvalue()
             
-            st.image(byte_im, caption=f"QR para {usuario}", use_column_width=True)
-            st.caption("Pide al asistente que escanee este código.")
+            st.image(byte_im, caption=f"QR para invitados de {usuario}", use_column_width=True)
+            st.info(f"Enlace generado: {link_registro}")
 
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state.logged_in = False
