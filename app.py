@@ -153,8 +153,7 @@ else:
         # URL BASE - IMPORTANTE: URL LIMPIA SIN CORCHETES
         base_url = st.text_input(
             "URL Pública de la App:", 
-            value="https://registro-ciudadano-app.streamlit.app",
-            help="Usa la URL que termina en .streamlit.app"
+            value=" "
         )
         
         if base_url:
