@@ -1,6 +1,3 @@
-# FORMULARIO
-TOMA DE DATOS DE PERSONAS
-
 import streamlit as st
 import pandas as pd
 import gspread
