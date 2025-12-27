@@ -19,9 +19,9 @@ st.markdown("""
     .main { background-color: #f8f9fa; }
     h1 { color: #0f3460; text-align: center; }
     .stButton>button { width: 100%; background-color: #0f3460; color: white; }
-    .stSuccess { background-color: #d4edda; color: #155724; padding: 10px; border-radius: 5px;}
     </style>
     """, unsafe_allow_html=True)
+
 
 
 # --- CONFIGURACIÓN DE GOOGLE SHEETS ---
@@ -56,37 +56,13 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
             sh = client.create(file_name)
             sh.share(st.secrets["admin_email"], perm_type='user', role='writer')
             worksheet = sh.sheet1
-def get_google_sheet_client():
-    try:
-        # Cargamos las credenciales desde los secretos de Streamlit
-        creds_dict = st.secrets["gcp_service_account"]
-        credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-        client = gspread.authorize(credentials)
-        return client
-    except Exception as e:
-        st.error(f"Error de autenticación: {e}")
-        return None
-
-def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
-    client = get_google_sheet_client()
-    if not client: return False
-
-    try:
-        try:
-            sh = client.open(file_name)
-            worksheet = sh.sheet1
-        except gspread.SpreadsheetNotFound:
-            st.info(f"Creando archivo '{file_name}' en Drive...")
-            sh = client.create(file_name)
-            sh.share(st.secrets["admin_email"], perm_type='user', role='writer')
-            worksheet = sh.sheet1
             # Ahora incluimos QUIÉN registró el dato
             headers = ["Fecha Registro", "Registrado Por", "Nombre Completo", "Cédula", "Teléfono", 
                        "Ocupación", "Dirección", "Barrio", "Ciudad"]
             worksheet.append_row(headers)
 
         timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-        # Obtenemos el usuario actual de la sesión
+        # Obtenemos el usuario actual de la sesión (Fabian, Xammy, etc.)
         usuario_actual = st.session_state.get("user_name", "Desconocido")
         
         row = [
@@ -170,17 +146,23 @@ else:
     # Vista para el USUARIO REGISTRADO (Admin)
     st.sidebar.markdown(f"### 👤 Usuario: **{usuario.capitalize()}**")
     
-    # GENERADOR DE QR AUTOMÁTICO
-    with st.sidebar.expander("📱 Generar QR para Asistentes", expanded=True):
-        st.write("Escanea para registrarte con este usuario.")
+    # GENERADOR DE QR
+    with st.sidebar.expander("📱 Generar QR para Asistentes"):
+        st.write("Genera un QR para que los asistentes se registren ellos mismos bajo tu nombre.")
         
-        # URL fija para automatización
-        base_url = "[https://registro-ciudadano-app.streamlit.app](https://registro-ciudadano-app.streamlit.app)"
+        # URL BASE - IMPORTANTE: URL LIMPIA SIN CORCHETES
+        base_url = st.text_input(
+            "URL Pública de la App:", 
+            value="[https://registro-ciudadano-app.streamlit.app](https://registro-ciudadano-app.streamlit.app)",
+            help="Usa la URL que termina en .streamlit.app"
+        )
         
-        link_registro = f"{base_url}?ref={usuario}"
-        
-        # Generar imagen QR
-        try:
+        if base_url:
+            # Limpiamos la URL por si acaso tiene barra al final
+            base_url = base_url.rstrip("/")
+            link_registro = f"{base_url}?ref={usuario}"
+            
+            # Generar imagen QR
             qr = qrcode.QRCode(box_size=10, border=4)
             qr.add_data(link_registro)
             qr.make(fit=True)
@@ -191,14 +173,13 @@ else:
             img.save(buf, format="PNG")
             byte_im = buf.getvalue()
             
-            st.image(byte_im, caption=f"Invitación de {usuario}", use_column_width=True)
-        except Exception as e:
-            st.error(f"Error generando QR: {e}")
+            st.image(byte_im, caption=f"QR para invitados de {usuario}", use_column_width=True)
+            st.info(f"Enlace generado: {link_registro}")
 
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state.logged_in = False
         st.session_state.is_guest = False
-        # Limpiar query params al salir
+        # Limpiar query params al salir para no volver a entrar auto
         try:
             st.query_params.clear()
         except:
@@ -208,11 +189,7 @@ else:
 # 3. Formulario Principal
 st.title("🗳️ Registro de Datos Ciudadanos")
 if st.session_state.get("is_guest", False):
-    st.markdown(f"""
-    <div style="padding:10px; background-color:#d1ecf1; color:#0c5460; border-radius:5px; margin-bottom:10px;">
-        👋 <b>Modo Invitado:</b> Estás registrando datos para: <b>{usuario.capitalize()}</b>
-    </div>
-    """, unsafe_allow_html=True)
+    st.info(f"👋 ¡Hola! Estás llenando este formulario invitado por: **{usuario.capitalize()}**")
 
 st.markdown("---")
 st.write("Complete el formulario para el registro en la base de datos centralizada.")
