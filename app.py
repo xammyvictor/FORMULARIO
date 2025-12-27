@@ -23,8 +23,8 @@ st.markdown("""
 # --- CONFIGURACIÓN DE GOOGLE SHEETS ---
 # IMPORTANTE: Estas URLs deben estar limpias, sin corchetes extraños
 SCOPES = [
-    "[https://www.googleapis.com/auth/spreadsheets](https://www.googleapis.com/auth/spreadsheets)",
-    "[https://www.googleapis.com/auth/drive](https://www.googleapis.com/auth/drive)"
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
 ]
 
 def get_google_sheet_client():
