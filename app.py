@@ -314,7 +314,7 @@ else:
         st.rerun()
 
 # --- 3. FORMULARIO PRINCIPAL CON PERSISTENCIA ---
-st.title("🗳️ Registro Ciudadano")
+st.title("🗳️ Maria Irma")
 
 if st.session_state.get("is_guest", False):
     st.markdown(f"""
