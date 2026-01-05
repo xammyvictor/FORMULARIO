@@ -313,8 +313,7 @@ else:
             st.experimental_set_query_params()
         st.rerun()
 
-# 3. Formulario Principal
-# --- 3. FORMULARIO PRINCIPAL (REEMPLAZA DESDE AQUÍ HASTA EL FINAL) ---
+# --- 3. FORMULARIO PRINCIPAL ACTUALIZADO ---
 st.title("🗳️ Registro Ciudadano")
 
 if st.session_state.get("is_guest", False):
@@ -330,13 +329,14 @@ st.write("Complete la información del ciudadano a continuación.")
 with st.form("registro_form", clear_on_submit=True):
     col1, col2 = st.columns(2)
     with col1:
-        # El usuario escribe normal, nosotros lo procesamos luego
+        # NOMBRE: Lo procesamos a MAYÚSCULAS al enviar
         nombre_input = st.text_input("Nombre Completo")
         
-        # Agregamos una nota de ayuda (help) para guiar al usuario
-        cedula_input = st.text_input("Cédula de Ciudadanía", help="Ingrese solo números, sin puntos ni guiones")
+        # CÉDULA: Usamos text_input pero validamos estrictamente con una máscara numérica
+        cedula_input = st.text_input("Cédula de Ciudadanía (Solo números)", placeholder="Ej: 1065123456")
         
-        telefono_input = st.text_input("Teléfono", help="Ingrese solo números")
+        # TELÉFONO: Igual que la cédula
+        telefono_input = st.text_input("Teléfono (Solo números)", placeholder="Ej: 3001234567")
         
         ocupacion = st.text_input("Ocupación")
         
@@ -349,38 +349,43 @@ with st.form("registro_form", clear_on_submit=True):
     submitted = st.form_submit_button("Enviar Registro")
 
     if submitted:
-        # --- PROCESAMIENTO Y RESTRICCIONES ---
+        # --- PROCESAMIENTO ESTRICTO ---
         
-        # 1. Forzar Mayúsculas y limpiar espacios
+        # 1. Limpieza de espacios y conversión a MAYÚSCULAS
         nombre_final = nombre_input.strip().upper()
         cedula_final = cedula_input.strip()
         telefono_final = telefono_input.strip()
 
-        # 2. Validaciones de integridad
-        if not all([nombre_final, cedula_final, telefono_final, ocupacion, direccion, barrio, ciudad]):
-            st.warning("⚠️ Por favor complete todos los campos.")
-        
-        # Restricción: Solo números en Cédula
-        elif not cedula_final.isdigit():
-            st.error("❌ Error: La Cédula debe contener ÚNICAMENTE números. No use puntos, comas ni letras.")
-            
-        # Restricción: Solo números en Teléfono
-        elif not telefono_final.isdigit():
-            st.error("❌ Error: El Teléfono debe contener ÚNICAMENTE números.")
+        # 2. VALIDACIONES DE RESTRICCIÓN
+        errores = []
 
+        if not all([nombre_final, cedula_final, telefono_final, ocupacion, direccion, barrio, ciudad]):
+            errores.append("⚠️ Todos los campos son obligatorios.")
+        
+        # Restricción física de números: Si contiene algo que no sea dígito, falla.
+        if cedula_final and not cedula_final.isdigit():
+            errores.append("❌ La Cédula contiene letras o caracteres no permitidos. Use solo números.")
+            
+        if telefono_final and not telefono_final.isdigit():
+            errores.append("❌ El Teléfono contiene letras o caracteres no permitidos. Use solo números.")
+
+        # 3. MOSTRAR ERRORES O GUARDAR
+        if errores:
+            for error in errores:
+                st.error(error)
         else:
-            # Si todo está correcto, armamos el diccionario para guardar
+            # Si pasó todas las pruebas, guardamos
             data = {
                 "nombre": nombre_final, 
                 "cedula": cedula_final, 
                 "telefono": telefono_final,
-                "ocupacion": ocupacion, 
-                "direccion": direccion, 
-                "barrio": barrio, 
-                "ciudad": ciudad
+                "ocupacion": ocupacion.upper(), # También guardamos ocupación en mayúscula para orden
+                "direccion": direccion.upper(), 
+                "barrio": barrio.upper(), 
+                "ciudad": ciudad.upper()
             }
             
-            with st.spinner('Guardando en Google Drive...'):
+            with st.spinner('Guardando en base de datos...'):
                 if save_to_drive(data):
                     st.success(f"✅ ¡Registro de {nombre_final} guardado exitosamente!")
                     time.sleep(2)
