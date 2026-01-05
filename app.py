@@ -314,6 +314,7 @@ else:
         st.rerun()
 
 # 3. Formulario Principal
+# --- 3. FORMULARIO PRINCIPAL (REEMPLAZA DESDE AQUÍ HASTA EL FINAL) ---
 st.title("🗳️ Registro Ciudadano")
 
 if st.session_state.get("is_guest", False):
@@ -329,10 +330,16 @@ st.write("Complete la información del ciudadano a continuación.")
 with st.form("registro_form", clear_on_submit=True):
     col1, col2 = st.columns(2)
     with col1:
-        nombre = st.text_input("Nombre Completo")
-        cedula = st.text_input("Cédula de Ciudadanía")
-        telefono = st.text_input("Teléfono")
+        # El usuario escribe normal, nosotros lo procesamos luego
+        nombre_input = st.text_input("Nombre Completo")
+        
+        # Agregamos una nota de ayuda (help) para guiar al usuario
+        cedula_input = st.text_input("Cédula de Ciudadanía", help="Ingrese solo números, sin puntos ni guiones")
+        
+        telefono_input = st.text_input("Teléfono", help="Ingrese solo números")
+        
         ocupacion = st.text_input("Ocupación")
+        
     with col2:
         direccion = st.text_input("Dirección")
         barrio = st.text_input("Barrio")
@@ -342,15 +349,39 @@ with st.form("registro_form", clear_on_submit=True):
     submitted = st.form_submit_button("Enviar Registro")
 
     if submitted:
-        if not all([nombre, cedula, telefono, ocupacion, direccion, barrio, ciudad]):
+        # --- PROCESAMIENTO Y RESTRICCIONES ---
+        
+        # 1. Forzar Mayúsculas y limpiar espacios
+        nombre_final = nombre_input.strip().upper()
+        cedula_final = cedula_input.strip()
+        telefono_final = telefono_input.strip()
+
+        # 2. Validaciones de integridad
+        if not all([nombre_final, cedula_final, telefono_final, ocupacion, direccion, barrio, ciudad]):
             st.warning("⚠️ Por favor complete todos los campos.")
+        
+        # Restricción: Solo números en Cédula
+        elif not cedula_final.isdigit():
+            st.error("❌ Error: La Cédula debe contener ÚNICAMENTE números. No use puntos, comas ni letras.")
+            
+        # Restricción: Solo números en Teléfono
+        elif not telefono_final.isdigit():
+            st.error("❌ Error: El Teléfono debe contener ÚNICAMENTE números.")
+
         else:
+            # Si todo está correcto, armamos el diccionario para guardar
             data = {
-                "nombre": nombre, "cedula": cedula, "telefono": telefono,
-                "ocupacion": ocupacion, "direccion": direccion, "barrio": barrio, "ciudad": ciudad
+                "nombre": nombre_final, 
+                "cedula": cedula_final, 
+                "telefono": telefono_final,
+                "ocupacion": ocupacion, 
+                "direccion": direccion, 
+                "barrio": barrio, 
+                "ciudad": ciudad
             }
+            
             with st.spinner('Guardando en Google Drive...'):
                 if save_to_drive(data):
-                    st.success("✅ ¡Datos guardados exitosamente!")
+                    st.success(f"✅ ¡Registro de {nombre_final} guardado exitosamente!")
                     time.sleep(2)
                     st.rerun()
