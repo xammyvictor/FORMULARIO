@@ -313,7 +313,7 @@ else:
             st.experimental_set_query_params()
         st.rerun()
 
-# --- 3. FORMULARIO PRINCIPAL ACTUALIZADO ---
+# --- 3. FORMULARIO PRINCIPAL CON PERSISTENCIA ---
 st.title("🗳️ Registro Ciudadano")
 
 if st.session_state.get("is_guest", False):
@@ -326,67 +326,73 @@ if st.session_state.get("is_guest", False):
 st.markdown("---")
 st.write("Complete la información del ciudadano a continuación.")
 
-with st.form("registro_form", clear_on_submit=True):
+# Inicializar llaves en session_state si no existen para que no den error
+campos = ["nombre_v", "cedula_v", "telef_v", "ocupa_v", "direc_v", "barrio_v", "ciudad_v"]
+for campo in campos:
+    if campo not in st.session_state:
+        st.session_state[campo] = ""
+
+# Usamos un contenedor para el formulario
+with st.form("registro_form", clear_on_submit=False): # IMPORTANTE: False para no borrar
     col1, col2 = st.columns(2)
     with col1:
-        # NOMBRE: Lo procesamos a MAYÚSCULAS al enviar
-        nombre_input = st.text_input("Nombre Completo")
-        
-        # CÉDULA: Usamos text_input pero validamos estrictamente con una máscara numérica
-        cedula_input = st.text_input("Cédula de Ciudadanía (Solo números)", placeholder="Ej: 1065123456")
-        
-        # TELÉFONO: Igual que la cédula
-        telefono_input = st.text_input("Teléfono (Solo números)", placeholder="Ej: 3001234567")
-        
-        ocupacion = st.text_input("Ocupación")
+        nombre_input = st.text_input("Nombre Completo", value=st.session_state.nombre_v)
+        cedula_input = st.text_input("Cédula (Solo números)", value=st.session_state.cedula_v)
+        telefono_input = st.text_input("Teléfono (Solo números)", value=st.session_state.telef_v)
+        ocupacion_input = st.text_input("Ocupación", value=st.session_state.ocupa_v)
         
     with col2:
-        direccion = st.text_input("Dirección")
-        barrio = st.text_input("Barrio")
-        ciudad = st.text_input("Ciudad")
+        direccion_input = st.text_input("Dirección", value=st.session_state.direc_v)
+        barrio_input = st.text_input("Barrio", value=st.session_state.barrio_v)
+        ciudad_input = st.text_input("Ciudad", value=st.session_state.ciudad_v)
     
     st.markdown("### Confirmación")
     submitted = st.form_submit_button("Enviar Registro")
 
     if submitted:
-        # --- PROCESAMIENTO ESTRICTO ---
-        
-        # 1. Limpieza de espacios y conversión a MAYÚSCULAS
+        # Guardamos lo que el usuario escribió en el estado de la sesión para que no se borre
+        st.session_state.nombre_v = nombre_input
+        st.session_state.cedula_v = cedula_input
+        st.session_state.telef_v = telefono_input
+        st.session_state.ocupa_v = ocupacion_input
+        st.session_state.direc_v = direccion_input
+        st.session_state.barrio_v = barrio_input
+        st.session_state.ciudad_v = ciudad_input
+
+        # Procesamiento
         nombre_final = nombre_input.strip().upper()
         cedula_final = cedula_input.strip()
         telefono_final = telefono_input.strip()
 
-        # 2. VALIDACIONES DE RESTRICCIÓN
         errores = []
 
-        if not all([nombre_final, cedula_final, telefono_final, ocupacion, direccion, barrio, ciudad]):
+        # 1. Validación de vacíos
+        if not all([nombre_final, cedula_final, telefono_final, ocupacion_input, direccion_input, barrio_input, ciudad_input]):
             errores.append("⚠️ Todos los campos son obligatorios.")
         
-        # Restricción física de números: Si contiene algo que no sea dígito, falla.
+        # 2. Validación de números
         if cedula_final and not cedula_final.isdigit():
-            errores.append("❌ La Cédula contiene letras o caracteres no permitidos. Use solo números.")
+            errores.append("❌ La Cédula debe contener solo números.")
             
         if telefono_final and not telefono_final.isdigit():
-            errores.append("❌ El Teléfono contiene letras o caracteres no permitidos. Use solo números.")
+            errores.append("❌ El Teléfono debe contener solo números.")
 
-        # 3. MOSTRAR ERRORES O GUARDAR
         if errores:
             for error in errores:
                 st.error(error)
         else:
-            # Si pasó todas las pruebas, guardamos
+            # SI TODO ESTÁ BIEN, PROCEDEMOS
             data = {
-                "nombre": nombre_final, 
-                "cedula": cedula_final, 
-                "telefono": telefono_final,
-                "ocupacion": ocupacion.upper(), # También guardamos ocupación en mayúscula para orden
-                "direccion": direccion.upper(), 
-                "barrio": barrio.upper(), 
-                "ciudad": ciudad.upper()
+                "nombre": nombre_final, "cedula": cedula_final, "telefono": telefono_final,
+                "ocupacion": ocupacion_input.upper(), "direccion": direccion_input.upper(), 
+                "barrio": barrio_input.upper(), "ciudad": ciudad_input.upper()
             }
             
-            with st.spinner('Guardando en base de datos...'):
+            with st.spinner('Guardando datos...'):
                 if save_to_drive(data):
-                    st.success(f"✅ ¡Registro de {nombre_final} guardado exitosamente!")
+                    st.success(f"✅ ¡Registro exitoso!")
+                    # Limpiamos el estado solo después de un guardado exitoso
+                    for campo in campos:
+                        st.session_state[campo] = ""
                     time.sleep(2)
                     st.rerun()
