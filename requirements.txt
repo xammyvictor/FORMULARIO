@@ -3,4 +3,4 @@ pandas
 gspread
 google-auth
 qrcode
-Pillow
+requests
