@@ -53,7 +53,7 @@ def get_all_data(file_name="Base_Datos_Ciudadanos"):
         data = sh.sheet1.get_all_records()
         df = pd.DataFrame(data)
         if not df.empty:
-            # Limpieza profunda de nombres de columnas para evitar KeyErrors
+            # Limpieza de nombres de columnas
             df.columns = [str(c).strip() for c in df.columns]
         return df
     except Exception:
@@ -71,7 +71,6 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
             if "admin_email" in st.secrets:
                 sh.share(st.secrets["admin_email"], perm_type='user', role='writer')
             worksheet = sh.sheet1
-            # Encabezados exactos según tu Excel actualizado
             headers = ["Fecha Registro", "Registrado Por", "Nombre", "Cédula", "Teléfono", "Ocupación", "Dirección", "Barrio", "Ciudad", "Puesto votacion"]
             worksheet.append_row(headers)
 
@@ -88,7 +87,7 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
             data_dict["direccion"], 
             data_dict["barrio"], 
             data_dict["ciudad"],
-            data_dict.get("puesto", "") # Nuevo campo
+            data_dict.get("puesto", "")
         ]
         worksheet.append_row(row)
         return True
@@ -169,7 +168,6 @@ if check_session():
             enviar = st.form_submit_button("✅ Guardar Registro")
 
             if enviar:
-                # Persistencia manual del estado
                 st.session_state.val_nombre = in_nombre
                 st.session_state.val_cedula = in_cedula
                 st.session_state.val_telefono = in_telefono
@@ -180,7 +178,6 @@ if check_session():
                 st.session_state.val_puesto = in_puesto
 
                 errores = []
-                # Validación obligatoria excepto puesto
                 if not all([in_nombre.strip(), in_cedula.strip(), in_telefono.strip(), in_ocupacion.strip(), 
                             in_direccion.strip(), in_barrio.strip(), in_ciudad.strip()]):
                     errores.append("⚠️ Todos los campos (excepto Puesto) son obligatorios.")
@@ -225,7 +222,6 @@ if check_session():
         st.title("📊 Análisis de Datos")
         df = get_all_data()
         if not df.empty:
-            # Usar nombres de columnas flexibles
             col_nombre = 'Nombre' if 'Nombre' in df.columns else df.columns[2]
             col_ciudad = 'Ciudad' if 'Ciudad' in df.columns else 'Ciudad'
             col_lider = 'Registrado Por' if 'Registrado Por' in df.columns else df.columns[1]
@@ -237,10 +233,46 @@ if check_session():
 
             c1, c2 = st.columns(2)
             with c1:
-                st.subheader("Por Ciudad")
+                st.subheader("Concentración por Ciudad")
                 if col_ciudad in df.columns:
                     st.plotly_chart(px.pie(df, names=col_ciudad, color_discrete_sequence=px.colors.sequential.RdPu), use_container_width=True)
             with c2:
-                st.subheader("Por Líder")
+                st.subheader("Desempeño de Líderes")
                 st.plotly_chart(px.bar(df[col_lider].value_counts(), color_discrete_sequence=['#D81B60']), use_container_width=True)
+
+            # --- MAPA DE CALOR ---
+            st.markdown("---")
+            st.subheader("📍 Mapa de Calor (Concentración Geográfica)")
+            
+            # Coordenadas de referencia
+            coords = {
+                'BUGA': [3.9009, -76.3008], 'CALI': [3.4516, -76.5320], 'BOGOTA': [4.7110, -74.0721],
+                'MEDELLIN': [6.2442, -75.5812], 'PALMIRA': [3.5394, -76.3036], 'TULUA': [4.0847, -76.1954],
+                'CARTAGO': [4.7464, -75.9117], 'YUMBO': [3.5411, -76.4911], 'JAMUNDI': [3.2612, -76.5350],
+                'SAN PEDRO': [3.9936, -76.2281], 'GUACARI': [3.7633, -76.3325], 'DARIEN': [3.9314, -76.5186]
+            }
+
+            if col_ciudad in df.columns:
+                # Agrupar por ciudad para el mapa
+                map_data = df[col_ciudad].str.strip().str.upper().value_counts().reset_index()
+                map_data.columns = ['Ciudad', 'Cantidad']
+                
+                # Asignar coordenadas (Buga por defecto si no se encuentra)
+                map_data['lat'] = map_data['Ciudad'].apply(lambda x: coords.get(x, [3.9, -76.3])[0])
+                map_data['lon'] = map_data['Ciudad'].apply(lambda x: coords.get(x, [3.9, -76.3])[1])
+
+                fig_map = px.scatter_mapbox(
+                    map_data, 
+                    lat="lat", 
+                    lon="lon", 
+                    size="Cantidad", 
+                    color="Cantidad",
+                    color_continuous_scale="RdPu", 
+                    size_max=40, 
+                    zoom=7,
+                    mapbox_style="carto-positron",
+                    title="Densidad de Ciudadanos por Ciudad",
+                    hover_name="Ciudad"
+                )
+                st.plotly_chart(fig_map, use_container_width=True)
         else: st.info("Sin registros aún.")
