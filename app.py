@@ -5,394 +5,209 @@ from google.oauth2.service_account import Credentials
 import time
 import qrcode
 from io import BytesIO
+import plotly.express as px
 
 # --- CONFIGURACIÓN GENERAL ---
-# URL de tu aplicación (IMPORTANTE: Sin corchetes ni paréntesis extraños)
 BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
 
-# Configuración de la página
 st.set_page_config(
-    page_title="Formulario de Registro Ciudadano",
+    page_title="Sistema Maria Irma - Gestión Ciudadana",
     page_icon="🗳️",
-    layout="centered"
+    layout="wide" # Cambiado a wide para mejor visualización de tablas y mapas
 )
 
-# --- ESTILOS VISUALES (FORZADO MODO CLARO COMPLETO) ---
+# --- ESTILOS VISUALES ---
 st.markdown("""
     <style>
-    /* 1. FORZAR FONDO Y TEXTO GLOBAL */
-    .stApp {
-        background-color: #FFFFFF !important;
-        color: #333333 !important;
-    }
-    
-    /* 2. FORZAR ÍCONOS DE MENÚ Y HEADER (Corregir invisibilidad) */
-    header, [data-testid="stHeader"] {
-        background-color: #FFFFFF !important;
-    }
-    
-    /* Color de los iconos SVG (Hamburguesa, X de cerrar sidebar, 3 puntos) */
-    [data-testid="stHeader"] svg, [data-testid="stSidebarCollapsedControl"] svg, button[kind="header"] svg {
-        fill: #333333 !important;
-        color: #333333 !important;
-    }
-    /* Forzar color de texto en botones del header */
-    button[kind="header"] {
-        color: #333333 !important;
-    }
-
-    /* 3. TÍTULOS Y TEXTOS */
-    h1, h2, h3 { 
-        color: #D81B60 !important; 
-        text-align: center; 
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    }
-    p, label, .stMarkdown, .stText, h4, h5, h6, .stHtml {
-        color: #333333 !important;
-    }
-
-    /* 4. INPUTS (CAMPOS DE TEXTO) */
-    .stTextInput input, .stSelectbox div[data-baseweb="select"], .stTextArea textarea {
-        background-color: #FFFFFF !important;
-        color: #333333 !important;
-        border: 1px solid #ced4da !important;
-        caret-color: #E91E63 !important; /* Color del cursor */
-    }
-    
-    /* Placeholder (Texto gris cuando está vacío) */
-    ::placeholder {
-        color: #888888 !important;
-        opacity: 1 !important;
-    }
-    
-    /* Texto escrito dentro */
-    .stTextInput > div > div > input {
-        color: #333333 !important;
-    }
-
-    /* Borde rosado al enfocar */
-    .stTextInput input:focus, .stTextArea textarea:focus {
-        border-color: #E91E63 !important;
-        box-shadow: 0 0 0 1px #E91E63 !important;
-    }
-    
-    /* Etiquetas (Labels) */
-    .stTextInput label, .stSelectbox label {
-        color: #333333 !important;
-    }
-
-    /* 5. BOTONES */
-    .stButton>button { 
-        width: 100%; 
-        background-color: #E91E63 !important; 
-        color: white !important; 
-        border: none;
-        border-radius: 8px;
-        font-weight: bold;
-        transition: all 0.3s ease;
-    }
-    .stButton>button:hover {
-        background-color: #C2185B !important;
-        color: white !important;
-        border-color: #C2185B !important;
-    }
-    
-    /* 6. BARRA LATERAL (SIDEBAR) */
-    [data-testid="stSidebar"] {
-        background-color: #FCE4EC !important;
-    }
-    /* Elementos dentro del sidebar */
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] .stMarkdown {
-        color: #880E4F !important;
-    }
-    /* Estilo del Expander en sidebar */
-    [data-testid="stSidebar"] .streamlit-expanderHeader {
-        color: #880E4F !important;
-        background-color: rgba(255,255,255,0.5) !important;
-    }
-    [data-testid="stSidebar"] .streamlit-expanderContent {
-        color: #333333 !important;
-    }
-
-    /* 7. MENSAJES Y ALERTAS */
-    .stSuccess { 
-        background-color: #d4edda !important; 
-        color: #155724 !important; 
-        border-left: 5px solid #E91E63;
-    }
-    .stError {
-        background-color: #f8d7da !important;
-        color: #721c24 !important;
-    }
-    .stInfo {
-        background-color: #cce5ff !important;
-        color: #004085 !important;
-    }
-    .stWarning {
-        background-color: #fff3cd !important;
-        color: #856404 !important;
-    }
-
-    /* 8. MODO INVITADO */
-    .guest-banner {
-        padding: 15px; 
-        background-color: #F8BBD0; 
-        color: #880E4F !important; 
-        border-radius: 8px; 
-        margin-bottom: 20px;
-        text-align: center;
-        border: 1px solid #F48FB1;
-    }
+    .stApp { background-color: #FFFFFF !important; color: #333333 !important; }
+    header, [data-testid="stHeader"] { background-color: #FFFFFF !important; }
+    [data-testid="stHeader"] svg, [data-testid="stSidebarCollapsedControl"] svg { fill: #333333 !important; }
+    h1, h2, h3 { color: #D81B60 !important; text-align: center; }
+    .stButton>button { width: 100%; background-color: #E91E63 !important; color: white !important; border-radius: 8px; }
+    [data-testid="stSidebar"] { background-color: #FCE4EC !important; }
+    .guest-banner { padding: 15px; background-color: #F8BBD0; color: #880E4F !important; border-radius: 8px; text-align: center; border: 1px solid #F48FB1; }
     </style>
     """, unsafe_allow_html=True)
 
-
-
 # --- CONFIGURACIÓN DE GOOGLE SHEETS ---
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 
 def get_google_sheet_client():
     try:
-        # Cargamos las credenciales desde los secretos de Streamlit
         creds_dict = st.secrets["gcp_service_account"]
         credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-        client = gspread.authorize(credentials)
-        return client
+        return gspread.authorize(credentials)
     except Exception as e:
-        st.error(f"Error de autenticación: {e}")
+        st.error(f"Error de conexión: {e}")
         return None
+
+def get_all_data(file_name="Base_Datos_Ciudadanos"):
+    client = get_google_sheet_client()
+    if not client: return pd.DataFrame()
+    try:
+        sh = client.open(file_name)
+        data = sh.sheet1.get_all_records()
+        return pd.DataFrame(data)
+    except Exception:
+        return pd.DataFrame()
 
 def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
     client = get_google_sheet_client()
     if not client: return False
-
     try:
         try:
             sh = client.open(file_name)
             worksheet = sh.sheet1
         except gspread.SpreadsheetNotFound:
-            st.info(f"Creando archivo '{file_name}' en Drive...")
             sh = client.create(file_name)
-            # Asegúrate de que 'admin_email' exista en st.secrets o maneja el error
             if "admin_email" in st.secrets:
                 sh.share(st.secrets["admin_email"], perm_type='user', role='writer')
             worksheet = sh.sheet1
-            # Encabezados
-            headers = ["Fecha Registro", "Registrado Por", "Nombre Completo", "Cédula", "Teléfono", 
-                       "Ocupación", "Dirección", "Barrio", "Ciudad"]
+            headers = ["Fecha Registro", "Registrado Por", "Nombre Completo", "Cédula", "Teléfono", "Ocupación", "Dirección", "Barrio", "Ciudad"]
             worksheet.append_row(headers)
 
         timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
-        # Obtenemos el usuario actual de la sesión
         usuario_actual = st.session_state.get("user_name", "Desconocido")
-        
-        row = [
-            timestamp, usuario_actual, data_dict["nombre"], data_dict["cedula"], data_dict["telefono"],
-            data_dict["ocupacion"], data_dict["direccion"], data_dict["barrio"], data_dict["ciudad"]
-        ]
+        row = [timestamp, usuario_actual, data_dict["nombre"], data_dict["cedula"], data_dict["telefono"],
+               data_dict["ocupacion"], data_dict["direccion"], data_dict["barrio"], data_dict["ciudad"]]
         worksheet.append_row(row)
         return True
     except Exception as e:
         st.error(f"Error al guardar: {e}")
         return False
 
-# --- SISTEMA DE LOGIN Y CONTROL DE SESIÓN ---
+# --- LÓGICA DE SESIÓN ---
 def check_session():
-    # 1. Revisar si viene referido por QR (Invitado)
-    try:
-        query_params = st.query_params
-    except:
-        # Fallback para versiones antiguas de Streamlit
-        query_params = st.experimental_get_query_params()
-        
-    ref_user = query_params.get("ref")
-    
-    # Si hay un referido en la URL, iniciamos sesión como invitado automáticamente
-    if ref_user:
-        # Si es una lista (dependiendo de la versión de streamlit), sacamos el primer elemento
-        if isinstance(ref_user, list):
-            ref_user = ref_user[0]
-            
-        st.session_state.logged_in = True
-        st.session_state.user_name = ref_user
-        st.session_state.is_guest = True # Marcamos que es invitado
-        return True
+    if "query_params_checked" not in st.session_state:
+        try:
+            params = st.query_params
+            if "ref" in params:
+                st.session_state.logged_in = True
+                st.session_state.user_name = params["ref"]
+                st.session_state.is_guest = True
+        except: pass
+        st.session_state.query_params_checked = True
 
-    # 2. Si no es invitado, revisamos login normal
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
         st.session_state.is_guest = False
+
+    if not st.session_state.logged_in:
+        st.title("🔐 Acceso al Sistema")
+        with st.form("login_form"):
+            user = st.text_input("Usuario").lower().strip()
+            password = st.text_input("Contraseña", type="password")
+            if st.form_submit_button("Ingresar"):
+                credenciales = {"fabian": "1234", "xammy": "1234", "brayan": "1234", "arturo": "1234"}
+                if user in credenciales and credenciales[user] == password:
+                    st.session_state.logged_in = True
+                    st.session_state.user_name = user
+                    st.session_state.is_guest = False
+                    st.rerun()
+                else: st.error("❌ Credenciales incorrectas")
+        return False
+    return True
+
+# --- NAVEGACIÓN ---
+if check_session():
+    usuario = st.session_state.user_name
     
-    if st.session_state.logged_in:
-        return True
-
-    # 3. Mostrar Pantalla de Login
-    st.title("🔐 Acceso al Sistema")
-    st.markdown("<p style='text-align: center; color: #666 !important;'>Ingrese sus credenciales para gestionar el registro.</p>", unsafe_allow_html=True)
-
-    with st.form("login_form"):
-        user = st.text_input("Usuario").lower().strip()
-        password = st.text_input("Contraseña", type="password")
-        submitted = st.form_submit_button("Ingresar")
-
-        if submitted:
-            # USUARIOS CONFIGURADOS
-            credenciales = {
-                "fabian": "1234",
-                "xammy": "1234",
-                "brayan": "1234",
-                "arturo": "1234"
-            }
-            
-            if user in credenciales and credenciales[user] == password:
-                st.session_state.logged_in = True
-                st.session_state.user_name = user
-                st.session_state.is_guest = False # Es admin/usuario real
-                st.rerun()
-            else:
-                st.error("❌ Usuario o contraseña incorrectos")
-    return False
-
-# --- FLUJO PRINCIPAL DE LA APP ---
-
-# 1. Verificar Login (o Referido QR)
-if not check_session():
-    st.stop()
-
-# 2. Barra lateral (Diferente para Admin vs Invitado)
-usuario = st.session_state.user_name
-
-if st.session_state.get("is_guest", False):
-    # Vista para el ASISTENTE (Invitado)
-    st.sidebar.info(f"📋 Registro Activo\n\nResponsable: **{usuario.capitalize()}**")
-else:
-    # Vista para el USUARIO REGISTRADO (Admin)
-    st.sidebar.markdown(f"### 👤 Usuario: **{usuario.capitalize()}**")
+    # Menú Lateral
+    st.sidebar.title(f"Bienvenido, {usuario.capitalize()}")
+    opcion = st.sidebar.radio("Ir a:", ["📝 Registro Nuevo", "🔍 Búsqueda Rápida", "📊 Estadísticas y Mapa"])
     
-    # GENERADOR DE QR CON BOTÓN
-    with st.sidebar.expander("📱 Generar QR", expanded=True):
-        st.write("QR para asistentes:")
-        
-        # Campo de texto para la URL (por defecto usa BASE_URL)
-        url_input = st.text_input("URL App:", value=BASE_URL)
-        
-        # Botón para generar el QR
-        if st.button("Generar Código QR"):
-            # Limpiamos la URL
-            clean_url = url_input.strip().rstrip("/")
-            link_registro = f"{clean_url}?ref={usuario}"
-            
-            # Generar imagen QR
-            try:
-                qr = qrcode.QRCode(box_size=10, border=4)
-                qr.add_data(link_registro)
-                qr.make(fit=True)
-                img = qr.make_image(fill_color="#E91E63", back_color="white") # QR Rosado
-                
-                # Convertir a bytes para mostrar
-                buf = BytesIO()
-                img.save(buf, format="PNG")
-                byte_im = buf.getvalue()
-                
-                st.image(byte_im, caption=f"QR de {usuario}", use_column_width=True)
-                st.success("¡QR listo!")
-            except Exception as e:
-                st.error(f"Error QR: {e}")
-
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state.logged_in = False
-        st.session_state.is_guest = False
-        # Limpiar query params al salir
-        try:
-            st.query_params.clear()
-        except:
-            # Fallback para versiones antiguas
-            st.experimental_set_query_params()
         st.rerun()
 
-# --- 3. FORMULARIO PRINCIPAL CON PERSISTENCIA ---
-st.title("🗳️ Maria Irma")
+    # --- SECCIÓN 1: REGISTRO ---
+    if opcion == "📝 Registro Nuevo":
+        st.title("🗳️ Formulario de Registro")
+        if st.session_state.get("is_guest"):
+            st.markdown(f'<div class="guest-banner">Modo Invitado: Registrando para <b>{usuario}</b></div>', unsafe_allow_html=True)
 
-if st.session_state.get("is_guest", False):
-    st.markdown(f"""
-    <div class="guest-banner">
-        👋 <b>Modo Invitado:</b> Estás registrando datos para: <b>{usuario.capitalize()}</b>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.markdown("---")
-st.write("Complete la información del ciudadano a continuación.")
-
-# Inicializar llaves en session_state si no existen para que no den error
-campos = ["nombre_v", "cedula_v", "telef_v", "ocupa_v", "direc_v", "barrio_v", "ciudad_v"]
-for campo in campos:
-    if campo not in st.session_state:
-        st.session_state[campo] = ""
-
-# Usamos un contenedor para el formulario
-with st.form("registro_form", clear_on_submit=False): # IMPORTANTE: False para no borrar
-    col1, col2 = st.columns(2)
-    with col1:
-        nombre_input = st.text_input("Nombre Completo", value=st.session_state.nombre_v)
-        cedula_input = st.text_input("Cédula (Solo números)", value=st.session_state.cedula_v)
-        telefono_input = st.text_input("Teléfono (Solo números)", value=st.session_state.telef_v)
-        ocupacion_input = st.text_input("Ocupación", value=st.session_state.ocupa_v)
-        
-    with col2:
-        direccion_input = st.text_input("Dirección", value=st.session_state.direc_v)
-        barrio_input = st.text_input("Barrio", value=st.session_state.barrio_v)
-        ciudad_input = st.text_input("Ciudad", value=st.session_state.ciudad_v)
-    
-    st.markdown("### Confirmación")
-    submitted = st.form_submit_button("Enviar Registro")
-
-    if submitted:
-        # Guardamos lo que el usuario escribió en el estado de la sesión para que no se borre
-        st.session_state.nombre_v = nombre_input
-        st.session_state.cedula_v = cedula_input
-        st.session_state.telef_v = telefono_input
-        st.session_state.ocupa_v = ocupacion_input
-        st.session_state.direc_v = direccion_input
-        st.session_state.barrio_v = barrio_input
-        st.session_state.ciudad_v = ciudad_input
-
-        # Procesamiento
-        nombre_final = nombre_input.strip().upper()
-        cedula_final = cedula_input.strip()
-        telefono_final = telefono_input.strip()
-
-        errores = []
-
-        # 1. Validación de vacíos
-        if not all([nombre_final, cedula_final, telefono_final, ocupacion_input, direccion_input, barrio_input, ciudad_input]):
-            errores.append("⚠️ Todos los campos son obligatorios.")
-        
-        # 2. Validación de números
-        if cedula_final and not cedula_final.isdigit():
-            errores.append("❌ La Cédula debe contener solo números.")
+        with st.form("registro_form"):
+            col1, col2 = st.columns(2)
+            nombre = col1.text_input("Nombre Completo")
+            cedula = col1.text_input("Cédula")
+            telef = col1.text_input("Teléfono")
+            ocupa = col1.text_input("Ocupación")
+            direc = col2.text_input("Dirección")
+            barrio = col2.text_input("Barrio")
+            ciudad = col2.text_input("Ciudad", value="Buga") # Ciudad por defecto
             
-        if telefono_final and not telefono_final.isdigit():
-            errores.append("❌ El Teléfono debe contener solo números.")
+            if st.form_submit_button("Enviar Registro"):
+                if all([nombre, cedula, telef, ciudad]):
+                    data = {"nombre": nombre.upper(), "cedula": cedula, "telefono": telef, "ocupacion": ocupa.upper(), 
+                            "direccion": direc.upper(), "barrio": barrio.upper(), "ciudad": ciudad.upper()}
+                    if save_to_drive(data):
+                        st.success("✅ ¡Guardado exitosamente!")
+                        time.sleep(1)
+                        st.rerun()
+                else: st.error("⚠️ Nombre, Cédula, Teléfono y Ciudad son obligatorios.")
 
-        if errores:
-            for error in errores:
-                st.error(error)
-        else:
-            # SI TODO ESTÁ BIEN, PROCEDEMOS
-            data = {
-                "nombre": nombre_final, "cedula": cedula_final, "telefono": telefono_final,
-                "ocupacion": ocupacion_input.upper(), "direccion": direccion_input.upper(), 
-                "barrio": barrio_input.upper(), "ciudad": ciudad_input.upper()
+    # --- SECCIÓN 2: BÚSQUEDA ---
+    elif opcion == "🔍 Búsqueda Rápida":
+        st.title("🔍 Consulta de Ciudadanos")
+        df = get_all_data()
+        if not df.empty:
+            busqueda = st.text_input("Buscar por Nombre o Cédula:").upper()
+            if busqueda:
+                # Convertir todo a string para búsqueda segura
+                df_str = df.astype(str)
+                resultado = df[df_str.apply(lambda row: busqueda in row.values, axis=1)]
+                if not resultado.empty:
+                    st.dataframe(resultado, use_container_width=True)
+                else: st.warning("No se encontraron coincidencias.")
+            else:
+                st.write("Últimos registros:")
+                st.dataframe(df.tail(10), use_container_width=True)
+        else: st.info("No hay datos registrados aún.")
+
+    # --- SECCIÓN 3: ESTADÍSTICAS Y MAPA ---
+    elif opcion == "📊 Estadísticas y Mapa":
+        st.title("📊 Análisis de Datos")
+        df = get_all_data()
+        
+        if not df.empty:
+            # Métricas rápidas
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total Registrados", len(df))
+            c2.metric("Ciudades", df['Ciudad'].nunique())
+            c3.metric("Líder más activo", df['Registrado Por'].mode()[0])
+
+            col_left, col_right = st.columns(2)
+
+            with col_left:
+                st.subheader("Distribución por Ciudad")
+                fig_city = px.pie(df, names='Ciudad', hole=0.4, color_discrete_sequence=px.colors.sequential.RdPu)
+                st.plotly_chart(fig_city, use_container_width=True)
+
+            with col_right:
+                st.subheader("Registros por Usuario")
+                fig_user = px.bar(df['Registrado Por'].value_counts(), labels={'value':'Cantidad', 'index':'Usuario'}, color_discrete_sequence=['#D81B60'])
+                st.plotly_chart(fig_user, use_container_width=True)
+
+            # --- MAPA DE CALOR (SIMULADO POR CIUDAD) ---
+            st.subheader("📍 Mapa de Concentración por Ciudad")
+            
+            # Diccionario de coordenadas básicas de Colombia (puedes ampliarlo)
+            coords = {
+                'BUGA': [3.9009, -76.3008], 'CALI': [3.4516, -76.5320], 'BOGOTA': [4.7110, -74.0721],
+                'MEDELLIN': [6.2442, -75.5812], 'PALMIRA': [3.5394, -76.3036], 'TULUA': [4.0847, -76.1954],
+                'CARTAGO': [4.7464, -75.9117], 'YUMBO': [3.5411, -76.4911]
             }
-            
-            with st.spinner('Guardando datos...'):
-                if save_to_drive(data):
-                    st.success(f"✅ ¡Registro exitoso!")
-                    # Limpiamos el estado solo después de un guardado exitoso
-                    for campo in campos:
-                        st.session_state[campo] = ""
-                    time.sleep(2)
-                    st.rerun()
+
+            # Preparar datos para el mapa
+            map_data = df['Ciudad'].value_counts().reset_index()
+            map_data.columns = ['Ciudad', 'Cantidad']
+            map_data['lat'] = map_data['Ciudad'].apply(lambda x: coords.get(x.strip().upper(), [3.9, -76.3])[0])
+            map_data['lon'] = map_data['Ciudad'].apply(lambda x: coords.get(x.strip().upper(), [3.9, -76.3])[1])
+
+            # Mostrar Mapa
+            fig_map = px.scatter_mapbox(map_data, lat="lat", lon="lon", size="Cantidad", color="Cantidad",
+                                      color_continuous_scale=px.colors.sequential.RdPu, size_max=40, zoom=6,
+                                      mapbox_style="carto-positron", title="Densidad de Registros")
+            st.plotly_chart(fig_map, use_container_width=True)
+
+        else: st.info("No hay datos para mostrar estadísticas.")
