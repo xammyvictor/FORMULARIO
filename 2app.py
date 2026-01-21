@@ -98,7 +98,6 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
 def check_session():
     if "query_params_checked" not in st.session_state:
         try:
-            # Captura de referido QR
             try:
                 params = st.query_params
             except:
@@ -146,11 +145,22 @@ if check_session():
     # BARRA LATERAL
     st.sidebar.markdown(f"### 👤 Usuario: **{usuario.capitalize()}**")
     
-    # Navegación principal
-    opcion = st.sidebar.radio("Navegación:", ["📝 Registro Nuevo", "🔍 Búsqueda Rápida", "📊 Estadísticas"])
+    # --- RESTRICCIÓN DE ACCESO ---
+    # Solo estos usuarios pueden ver estadísticas y búsqueda rápida
+    USUARIOS_CON_ACCESO_TOTAL = ["fabian", "xammy", "brayan"]
+    es_admin = usuario.lower() in USUARIOS_CON_ACCESO_TOTAL and not st.session_state.get("is_guest", False)
+
+    if es_admin:
+        opciones_menu = ["📝 Registro Nuevo", "🔍 Búsqueda Rápida", "📊 Estadísticas"]
+    else:
+        opciones_menu = ["📝 Registro Nuevo"]
+        if not st.session_state.get("is_guest", False):
+            st.sidebar.warning("Acceso limitado: Solo módulo de registro.")
+
+    opcion = st.sidebar.radio("Navegación:", opciones_menu)
     
-    # GENERADOR DE QR (Solo se muestra a líderes, no a invitados)
-    if not st.session_state.get("is_guest", False):
+    # GENERADOR DE QR (Solo administradores)
+    if es_admin:
         with st.sidebar.expander("📱 Generar QR", expanded=False):
             st.write("QR para que otros se registren bajo tu nombre:")
             url_input = st.text_input("URL Base:", value=BASE_URL)
@@ -162,11 +172,10 @@ if check_session():
                     qr.add_data(link_registro)
                     qr.make(fit=True)
                     img = qr.make_image(fill_color="#E91E63", back_color="white")
-                    
                     buf = BytesIO()
                     img.save(buf, format="PNG")
                     st.image(buf.getvalue(), caption=f"QR de {usuario.capitalize()}", use_column_width=True)
-                    st.success("¡QR generado!")
+                    st.success("¡QR listo!")
                 except Exception as e:
                     st.error(f"Error al generar QR: {e}")
 
@@ -200,7 +209,7 @@ if check_session():
             enviar = st.form_submit_button("✅ Guardar Registro")
 
             if enviar:
-                # Mantener la información escrita en caso de error
+                # Mantener la información en el formulario si hay error
                 st.session_state.val_nombre = in_nombre
                 st.session_state.val_cedula = in_cedula
                 st.session_state.val_telefono = in_telefono
@@ -211,10 +220,12 @@ if check_session():
                 st.session_state.val_puesto = in_puesto
 
                 errores = []
+                # Validación de campos vacíos
                 if not all([in_nombre.strip(), in_cedula.strip(), in_telefono.strip(), in_ocupacion.strip(), 
                             in_direccion.strip(), in_barrio.strip(), in_ciudad.strip()]):
                     errores.append("⚠️ Todos los campos (excepto Puesto) son obligatorios.")
                 
+                # Validación numérica estricta
                 if in_cedula.strip() and not in_cedula.strip().isdigit():
                     errores.append("❌ La Cédula debe contener solo números.")
                 
@@ -230,16 +241,17 @@ if check_session():
                         "direccion": in_direccion.strip().upper(), "barrio": in_barrio.strip().upper(),
                         "ciudad": in_ciudad.strip().upper(), "puesto": in_puesto.strip().upper()
                     }
-                    with st.spinner("Guardando en base de datos..."):
+                    with st.spinner("Guardando registro..."):
                         if save_to_drive(data):
                             st.success(f"✅ ¡Registro de {in_nombre.upper()} guardado!")
+                            # Limpiar sesión solo después de éxito
                             for campo in campos_form:
                                 st.session_state[f"val_{campo}"] = "" if campo != "ciudad" else "BUGA"
                             time.sleep(2)
                             st.rerun()
 
-    # --- SECCIÓN 2: BÚSQUEDA ---
-    elif opcion == "🔍 Búsqueda Rápida":
+    # --- SECCIÓN 2: BÚSQUEDA (Solo Admin) ---
+    elif opcion == "🔍 Búsqueda Rápida" and es_admin:
         st.title("🔍 Consulta de Base de Datos")
         df = get_all_data()
         if not df.empty:
@@ -252,8 +264,8 @@ if check_session():
                 st.dataframe(df.tail(15), use_container_width=True)
         else: st.warning("No hay datos disponibles.")
 
-    # --- SECCIÓN 3: ESTADÍSTICAS ---
-    elif opcion == "📊 Estadísticas":
+    # --- SECCIÓN 3: ESTADÍSTICAS (Solo Admin) ---
+    elif opcion == "📊 Estadísticas" and es_admin:
         st.title("📊 Análisis de Gestión")
         df = get_all_data()
         if not df.empty:
@@ -276,7 +288,7 @@ if check_session():
                 if col_lider in df.columns:
                     st.plotly_chart(px.bar(df[col_lider].value_counts(), color_discrete_sequence=['#D81B60']), use_container_width=True)
 
-            # --- MAPA DE CALOR ---
+            # --- MAPA ---
             st.markdown("---")
             st.subheader("📍 Mapa Geográfico de Registros")
             coords = {
