@@ -13,7 +13,7 @@ BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
 st.set_page_config(
     page_title="Sistema Maria Irma - Gestión Ciudadana",
     page_icon="🗳️",
-    layout="wide" # Cambiado a wide para mejor visualización de tablas y mapas
+    layout="wide"
 )
 
 # --- ESTILOS VISUALES ---
@@ -21,11 +21,12 @@ st.markdown("""
     <style>
     .stApp { background-color: #FFFFFF !important; color: #333333 !important; }
     header, [data-testid="stHeader"] { background-color: #FFFFFF !important; }
-    [data-testid="stHeader"] svg, [data-testid="stSidebarCollapsedControl"] svg { fill: #333333 !important; }
-    h1, h2, h3 { color: #D81B60 !important; text-align: center; }
-    .stButton>button { width: 100%; background-color: #E91E63 !important; color: white !important; border-radius: 8px; }
+    h1, h2, h3 { color: #D81B60 !important; text-align: center; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    .stButton>button { width: 100%; background-color: #E91E63 !important; color: white !important; border-radius: 8px; font-weight: bold; height: 3em; }
+    .stButton>button:hover { background-color: #C2185B !important; border-color: #C2185B !important; }
     [data-testid="stSidebar"] { background-color: #FCE4EC !important; }
-    .guest-banner { padding: 15px; background-color: #F8BBD0; color: #880E4F !important; border-radius: 8px; text-align: center; border: 1px solid #F48FB1; }
+    .guest-banner { padding: 15px; background-color: #F8BBD0; color: #880E4F !important; border-radius: 8px; text-align: center; border: 1px solid #F48FB1; margin-bottom: 20px;}
+    label { color: #333333 !important; font-weight: 500; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -34,6 +35,9 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapi
 
 def get_google_sheet_client():
     try:
+        if "gcp_service_account" not in st.secrets:
+            st.error("Error: Credenciales 'gcp_service_account' no encontradas.")
+            return None
         creds_dict = st.secrets["gcp_service_account"]
         credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
         return gspread.authorize(credentials)
@@ -47,7 +51,11 @@ def get_all_data(file_name="Base_Datos_Ciudadanos"):
     try:
         sh = client.open(file_name)
         data = sh.sheet1.get_all_records()
-        return pd.DataFrame(data)
+        df = pd.DataFrame(data)
+        if not df.empty:
+            # Limpieza profunda de nombres de columnas para evitar KeyErrors
+            df.columns = [str(c).strip() for c in df.columns]
+        return df
     except Exception:
         return pd.DataFrame()
 
@@ -63,13 +71,25 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
             if "admin_email" in st.secrets:
                 sh.share(st.secrets["admin_email"], perm_type='user', role='writer')
             worksheet = sh.sheet1
-            headers = ["Fecha Registro", "Registrado Por", "Nombre Completo", "Cédula", "Teléfono", "Ocupación", "Dirección", "Barrio", "Ciudad"]
+            # Encabezados exactos según tu Excel actualizado
+            headers = ["Fecha Registro", "Registrado Por", "Nombre", "Cédula", "Teléfono", "Ocupación", "Dirección", "Barrio", "Ciudad", "Puesto votacion"]
             worksheet.append_row(headers)
 
         timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
         usuario_actual = st.session_state.get("user_name", "Desconocido")
-        row = [timestamp, usuario_actual, data_dict["nombre"], data_dict["cedula"], data_dict["telefono"],
-               data_dict["ocupacion"], data_dict["direccion"], data_dict["barrio"], data_dict["ciudad"]]
+        
+        row = [
+            timestamp, 
+            usuario_actual, 
+            data_dict["nombre"], 
+            data_dict["cedula"], 
+            data_dict["telefono"],
+            data_dict["ocupacion"], 
+            data_dict["direccion"], 
+            data_dict["barrio"], 
+            data_dict["ciudad"],
+            data_dict.get("puesto", "") # Nuevo campo
+        ]
         worksheet.append_row(row)
         return True
     except Exception as e:
@@ -108,106 +128,119 @@ def check_session():
         return False
     return True
 
-# --- NAVEGACIÓN ---
+# --- INICIALIZACIÓN DE ESTADO ---
+campos_form = ["nombre", "cedula", "telefono", "ocupacion", "direccion", "barrio", "ciudad", "puesto"]
+for campo in campos_form:
+    if f"val_{campo}" not in st.session_state:
+        st.session_state[f"val_{campo}"] = "" if campo != "ciudad" else "BUGA"
+
+# --- FLUJO PRINCIPAL ---
 if check_session():
     usuario = st.session_state.user_name
-    
-    # Menú Lateral
-    st.sidebar.title(f"Bienvenido, {usuario.capitalize()}")
-    opcion = st.sidebar.radio("Ir a:", ["📝 Registro Nuevo", "🔍 Búsqueda Rápida", "📊 Estadísticas y Mapa"])
+    st.sidebar.markdown(f"## Hola, **{usuario.capitalize()}**")
+    opcion = st.sidebar.radio("Navegación:", ["📝 Registro Nuevo", "🔍 Búsqueda Rápida", "📊 Estadísticas"])
     
     if st.sidebar.button("Cerrar Sesión"):
-        st.session_state.logged_in = False
+        st.session_state.clear()
         st.rerun()
 
     # --- SECCIÓN 1: REGISTRO ---
     if opcion == "📝 Registro Nuevo":
-        st.title("🗳️ Formulario de Registro")
+        st.title("🗳️ Nuevo Registro")
         if st.session_state.get("is_guest"):
-            st.markdown(f'<div class="guest-banner">Modo Invitado: Registrando para <b>{usuario}</b></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="guest-banner">👋 Registrando para el equipo de: <b>{usuario.capitalize()}</b></div>', unsafe_allow_html=True)
 
-        with st.form("registro_form"):
+        with st.form("registro_form", clear_on_submit=False):
             col1, col2 = st.columns(2)
-            nombre = col1.text_input("Nombre Completo")
-            cedula = col1.text_input("Cédula")
-            telef = col1.text_input("Teléfono")
-            ocupa = col1.text_input("Ocupación")
-            direc = col2.text_input("Dirección")
-            barrio = col2.text_input("Barrio")
-            ciudad = col2.text_input("Ciudad", value="Buga") # Ciudad por defecto
+            with col1:
+                in_nombre = st.text_input("Nombre Completo", value=st.session_state.val_nombre)
+                in_cedula = st.text_input("Número de Cédula", value=st.session_state.val_cedula)
+                in_telefono = st.text_input("Número de Teléfono", value=st.session_state.val_telefono)
+            with col2:
+                in_ocupacion = st.text_input("Ocupación", value=st.session_state.val_ocupacion)
+                in_direccion = st.text_input("Dirección", value=st.session_state.val_direccion)
+                in_barrio = st.text_input("Barrio", value=st.session_state.val_barrio)
             
-            if st.form_submit_button("Enviar Registro"):
-                if all([nombre, cedula, telef, ciudad]):
-                    data = {"nombre": nombre.upper(), "cedula": cedula, "telefono": telef, "ocupacion": ocupa.upper(), 
-                            "direccion": direc.upper(), "barrio": barrio.upper(), "ciudad": ciudad.upper()}
+            c_map1, c_map2 = st.columns(2)
+            in_ciudad = c_map1.text_input("Ciudad", value=st.session_state.val_ciudad)
+            in_puesto = c_map2.text_input("Puesto de Votación (Opcional)", value=st.session_state.val_puesto)
+            
+            st.markdown("---")
+            enviar = st.form_submit_button("✅ Guardar Registro")
+
+            if enviar:
+                # Persistencia manual del estado
+                st.session_state.val_nombre = in_nombre
+                st.session_state.val_cedula = in_cedula
+                st.session_state.val_telefono = in_telefono
+                st.session_state.val_ocupacion = in_ocupacion
+                st.session_state.val_direccion = in_direccion
+                st.session_state.val_barrio = in_barrio
+                st.session_state.val_ciudad = in_ciudad
+                st.session_state.val_puesto = in_puesto
+
+                errores = []
+                # Validación obligatoria excepto puesto
+                if not all([in_nombre.strip(), in_cedula.strip(), in_telefono.strip(), in_ocupacion.strip(), 
+                            in_direccion.strip(), in_barrio.strip(), in_ciudad.strip()]):
+                    errores.append("⚠️ Todos los campos (excepto Puesto) son obligatorios.")
+                
+                if in_cedula.strip() and not in_cedula.strip().isdigit():
+                    errores.append("❌ La Cédula debe ser solo números.")
+                
+                if in_telefono.strip() and not in_telefono.strip().isdigit():
+                    errores.append("❌ El Teléfono debe ser solo números.")
+
+                if errores:
+                    for error in errores: st.error(error)
+                else:
+                    data = {
+                        "nombre": in_nombre.strip().upper(), "cedula": in_cedula.strip(),
+                        "telefono": in_telefono.strip(), "ocupacion": in_ocupacion.strip().upper(),
+                        "direccion": in_direccion.strip().upper(), "barrio": in_barrio.strip().upper(),
+                        "ciudad": in_ciudad.strip().upper(), "puesto": in_puesto.strip().upper()
+                    }
                     if save_to_drive(data):
-                        st.success("✅ ¡Guardado exitosamente!")
-                        time.sleep(1)
+                        st.success(f"✅ ¡Registro de {in_nombre.upper()} guardado!")
+                        for campo in campos_form:
+                            st.session_state[f"val_{campo}"] = "" if campo != "ciudad" else "BUGA"
+                        time.sleep(2)
                         st.rerun()
-                else: st.error("⚠️ Nombre, Cédula, Teléfono y Ciudad son obligatorios.")
 
     # --- SECCIÓN 2: BÚSQUEDA ---
     elif opcion == "🔍 Búsqueda Rápida":
-        st.title("🔍 Consulta de Ciudadanos")
+        st.title("🔍 Consulta")
         df = get_all_data()
         if not df.empty:
             busqueda = st.text_input("Buscar por Nombre o Cédula:").upper()
             if busqueda:
-                # Convertir todo a string para búsqueda segura
-                df_str = df.astype(str)
-                resultado = df[df_str.apply(lambda row: busqueda in row.values, axis=1)]
-                if not resultado.empty:
-                    st.dataframe(resultado, use_container_width=True)
-                else: st.warning("No se encontraron coincidencias.")
+                mask = df.astype(str).apply(lambda row: row.str.contains(busqueda).any(), axis=1)
+                st.dataframe(df[mask], use_container_width=True)
             else:
-                st.write("Últimos registros:")
-                st.dataframe(df.tail(10), use_container_width=True)
-        else: st.info("No hay datos registrados aún.")
+                st.dataframe(df.tail(15), use_container_width=True)
+        else: st.warning("Sin datos.")
 
-    # --- SECCIÓN 3: ESTADÍSTICAS Y MAPA ---
-    elif opcion == "📊 Estadísticas y Mapa":
+    # --- SECCIÓN 3: ESTADÍSTICAS ---
+    elif opcion == "📊 Estadísticas":
         st.title("📊 Análisis de Datos")
         df = get_all_data()
-        
         if not df.empty:
-            # Métricas rápidas
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Total Registrados", len(df))
-            c2.metric("Ciudades", df['Ciudad'].nunique())
-            c3.metric("Líder más activo", df['Registrado Por'].mode()[0])
+            # Usar nombres de columnas flexibles
+            col_nombre = 'Nombre' if 'Nombre' in df.columns else df.columns[2]
+            col_ciudad = 'Ciudad' if 'Ciudad' in df.columns else 'Ciudad'
+            col_lider = 'Registrado Por' if 'Registrado Por' in df.columns else df.columns[1]
 
-            col_left, col_right = st.columns(2)
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total", len(df))
+            m2.metric("Ciudades", df[col_ciudad].nunique() if col_ciudad in df.columns else 0)
+            m3.metric("Último", df.iloc[-1][col_nombre] if col_nombre in df.columns else "N/A")
 
-            with col_left:
-                st.subheader("Distribución por Ciudad")
-                fig_city = px.pie(df, names='Ciudad', hole=0.4, color_discrete_sequence=px.colors.sequential.RdPu)
-                st.plotly_chart(fig_city, use_container_width=True)
-
-            with col_right:
-                st.subheader("Registros por Usuario")
-                fig_user = px.bar(df['Registrado Por'].value_counts(), labels={'value':'Cantidad', 'index':'Usuario'}, color_discrete_sequence=['#D81B60'])
-                st.plotly_chart(fig_user, use_container_width=True)
-
-            # --- MAPA DE CALOR (SIMULADO POR CIUDAD) ---
-            st.subheader("📍 Mapa de Concentración por Ciudad")
-            
-            # Diccionario de coordenadas básicas de Colombia (puedes ampliarlo)
-            coords = {
-                'BUGA': [3.9009, -76.3008], 'CALI': [3.4516, -76.5320], 'BOGOTA': [4.7110, -74.0721],
-                'MEDELLIN': [6.2442, -75.5812], 'PALMIRA': [3.5394, -76.3036], 'TULUA': [4.0847, -76.1954],
-                'CARTAGO': [4.7464, -75.9117], 'YUMBO': [3.5411, -76.4911]
-            }
-
-            # Preparar datos para el mapa
-            map_data = df['Ciudad'].value_counts().reset_index()
-            map_data.columns = ['Ciudad', 'Cantidad']
-            map_data['lat'] = map_data['Ciudad'].apply(lambda x: coords.get(x.strip().upper(), [3.9, -76.3])[0])
-            map_data['lon'] = map_data['Ciudad'].apply(lambda x: coords.get(x.strip().upper(), [3.9, -76.3])[1])
-
-            # Mostrar Mapa
-            fig_map = px.scatter_mapbox(map_data, lat="lat", lon="lon", size="Cantidad", color="Cantidad",
-                                      color_continuous_scale=px.colors.sequential.RdPu, size_max=40, zoom=6,
-                                      mapbox_style="carto-positron", title="Densidad de Registros")
-            st.plotly_chart(fig_map, use_container_width=True)
-
-        else: st.info("No hay datos para mostrar estadísticas.")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.subheader("Por Ciudad")
+                if col_ciudad in df.columns:
+                    st.plotly_chart(px.pie(df, names=col_ciudad, color_discrete_sequence=px.colors.sequential.RdPu), use_container_width=True)
+            with c2:
+                st.subheader("Por Líder")
+                st.plotly_chart(px.bar(df[col_lider].value_counts(), color_discrete_sequence=['#D81B60']), use_container_width=True)
+        else: st.info("Sin registros aún.")
