@@ -1,7 +1,8 @@
 streamlit
 pandas
 gspread
-google-oauth2-service-account
+google-oauth
 qrcode
 Pillow
 plotly
+requests
