@@ -53,7 +53,6 @@ def get_all_data(file_name="Base_Datos_Ciudadanos"):
         data = sh.sheet1.get_all_records()
         df = pd.DataFrame(data)
         if not df.empty:
-            # Limpieza de nombres de columnas
             df.columns = [str(c).strip() for c in df.columns]
         return df
     except Exception:
@@ -99,10 +98,17 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
 def check_session():
     if "query_params_checked" not in st.session_state:
         try:
-            params = st.query_params
+            # Captura de referido QR
+            try:
+                params = st.query_params
+            except:
+                params = st.experimental_get_query_params()
+                
             if "ref" in params:
+                ref_user = params["ref"]
+                if isinstance(ref_user, list): ref_user = ref_user[0]
                 st.session_state.logged_in = True
-                st.session_state.user_name = params["ref"]
+                st.session_state.user_name = ref_user
                 st.session_state.is_guest = True
         except: pass
         st.session_state.query_params_checked = True
@@ -136,20 +142,46 @@ for campo in campos_form:
 # --- FLUJO PRINCIPAL ---
 if check_session():
     usuario = st.session_state.user_name
-    st.sidebar.markdown(f"## Hola, **{usuario.capitalize()}**")
+    
+    # BARRA LATERAL
+    st.sidebar.markdown(f"### 👤 Usuario: **{usuario.capitalize()}**")
+    
+    # Navegación principal
     opcion = st.sidebar.radio("Navegación:", ["📝 Registro Nuevo", "🔍 Búsqueda Rápida", "📊 Estadísticas"])
     
+    # GENERADOR DE QR (Solo se muestra a líderes, no a invitados)
+    if not st.session_state.get("is_guest", False):
+        with st.sidebar.expander("📱 Generar QR", expanded=False):
+            st.write("QR para que otros se registren bajo tu nombre:")
+            url_input = st.text_input("URL Base:", value=BASE_URL)
+            if st.button("Generar Código QR"):
+                clean_url = url_input.strip().rstrip("/")
+                link_registro = f"{clean_url}?ref={usuario}"
+                try:
+                    qr = qrcode.QRCode(box_size=10, border=4)
+                    qr.add_data(link_registro)
+                    qr.make(fit=True)
+                    img = qr.make_image(fill_color="#E91E63", back_color="white")
+                    
+                    buf = BytesIO()
+                    img.save(buf, format="PNG")
+                    st.image(buf.getvalue(), caption=f"QR de {usuario.capitalize()}", use_column_width=True)
+                    st.success("¡QR generado!")
+                except Exception as e:
+                    st.error(f"Error al generar QR: {e}")
+
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state.clear()
         st.rerun()
 
     # --- SECCIÓN 1: REGISTRO ---
     if opcion == "📝 Registro Nuevo":
-        st.title("🗳️ Nuevo Registro")
+        st.title("🗳️ Nuevo Registro de Ciudadano")
         if st.session_state.get("is_guest"):
-            st.markdown(f'<div class="guest-banner">👋 Registrando para el equipo de: <b>{usuario.capitalize()}</b></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="guest-banner">👋 <b>Modo Invitado:</b> Estás registrando datos para: <b>{usuario.capitalize()}</b></div>', unsafe_allow_html=True)
 
         with st.form("registro_form", clear_on_submit=False):
+            st.subheader("Información Personal")
             col1, col2 = st.columns(2)
             with col1:
                 in_nombre = st.text_input("Nombre Completo", value=st.session_state.val_nombre)
@@ -168,6 +200,7 @@ if check_session():
             enviar = st.form_submit_button("✅ Guardar Registro")
 
             if enviar:
+                # Mantener la información escrita en caso de error
                 st.session_state.val_nombre = in_nombre
                 st.session_state.val_cedula = in_cedula
                 st.session_state.val_telefono = in_telefono
@@ -183,10 +216,10 @@ if check_session():
                     errores.append("⚠️ Todos los campos (excepto Puesto) son obligatorios.")
                 
                 if in_cedula.strip() and not in_cedula.strip().isdigit():
-                    errores.append("❌ La Cédula debe ser solo números.")
+                    errores.append("❌ La Cédula debe contener solo números.")
                 
                 if in_telefono.strip() and not in_telefono.strip().isdigit():
-                    errores.append("❌ El Teléfono debe ser solo números.")
+                    errores.append("❌ El Teléfono debe contener solo números.")
 
                 if errores:
                     for error in errores: st.error(error)
@@ -197,16 +230,17 @@ if check_session():
                         "direccion": in_direccion.strip().upper(), "barrio": in_barrio.strip().upper(),
                         "ciudad": in_ciudad.strip().upper(), "puesto": in_puesto.strip().upper()
                     }
-                    if save_to_drive(data):
-                        st.success(f"✅ ¡Registro de {in_nombre.upper()} guardado!")
-                        for campo in campos_form:
-                            st.session_state[f"val_{campo}"] = "" if campo != "ciudad" else "BUGA"
-                        time.sleep(2)
-                        st.rerun()
+                    with st.spinner("Guardando en base de datos..."):
+                        if save_to_drive(data):
+                            st.success(f"✅ ¡Registro de {in_nombre.upper()} guardado!")
+                            for campo in campos_form:
+                                st.session_state[f"val_{campo}"] = "" if campo != "ciudad" else "BUGA"
+                            time.sleep(2)
+                            st.rerun()
 
     # --- SECCIÓN 2: BÚSQUEDA ---
     elif opcion == "🔍 Búsqueda Rápida":
-        st.title("🔍 Consulta")
+        st.title("🔍 Consulta de Base de Datos")
         df = get_all_data()
         if not df.empty:
             busqueda = st.text_input("Buscar por Nombre o Cédula:").upper()
@@ -214,12 +248,13 @@ if check_session():
                 mask = df.astype(str).apply(lambda row: row.str.contains(busqueda).any(), axis=1)
                 st.dataframe(df[mask], use_container_width=True)
             else:
+                st.info("Mostrando registros recientes:")
                 st.dataframe(df.tail(15), use_container_width=True)
-        else: st.warning("Sin datos.")
+        else: st.warning("No hay datos disponibles.")
 
     # --- SECCIÓN 3: ESTADÍSTICAS ---
     elif opcion == "📊 Estadísticas":
-        st.title("📊 Análisis de Datos")
+        st.title("📊 Análisis de Gestión")
         df = get_all_data()
         if not df.empty:
             col_nombre = 'Nombre' if 'Nombre' in df.columns else df.columns[2]
@@ -227,9 +262,9 @@ if check_session():
             col_lider = 'Registrado Por' if 'Registrado Por' in df.columns else df.columns[1]
 
             m1, m2, m3 = st.columns(3)
-            m1.metric("Total", len(df))
-            m2.metric("Ciudades", df[col_ciudad].nunique() if col_ciudad in df.columns else 0)
-            m3.metric("Último", df.iloc[-1][col_nombre] if col_nombre in df.columns else "N/A")
+            m1.metric("Total Registrados", len(df))
+            m2.metric("Ciudades Cubiertas", df[col_ciudad].nunique() if col_ciudad in df.columns else 0)
+            m3.metric("Último Registro", df.iloc[-1][col_nombre] if col_nombre in df.columns else "N/A")
 
             c1, c2 = st.columns(2)
             with c1:
@@ -237,14 +272,13 @@ if check_session():
                 if col_ciudad in df.columns:
                     st.plotly_chart(px.pie(df, names=col_ciudad, color_discrete_sequence=px.colors.sequential.RdPu), use_container_width=True)
             with c2:
-                st.subheader("Desempeño de Líderes")
-                st.plotly_chart(px.bar(df[col_lider].value_counts(), color_discrete_sequence=['#D81B60']), use_container_width=True)
+                st.subheader("Desempeño por Líder")
+                if col_lider in df.columns:
+                    st.plotly_chart(px.bar(df[col_lider].value_counts(), color_discrete_sequence=['#D81B60']), use_container_width=True)
 
             # --- MAPA DE CALOR ---
             st.markdown("---")
-            st.subheader("📍 Mapa de Calor (Concentración Geográfica)")
-            
-            # Coordenadas de referencia
+            st.subheader("📍 Mapa Geográfico de Registros")
             coords = {
                 'BUGA': [3.9009, -76.3008], 'CALI': [3.4516, -76.5320], 'BOGOTA': [4.7110, -74.0721],
                 'MEDELLIN': [6.2442, -75.5812], 'PALMIRA': [3.5394, -76.3036], 'TULUA': [4.0847, -76.1954],
@@ -253,26 +287,15 @@ if check_session():
             }
 
             if col_ciudad in df.columns:
-                # Agrupar por ciudad para el mapa
                 map_data = df[col_ciudad].str.strip().str.upper().value_counts().reset_index()
                 map_data.columns = ['Ciudad', 'Cantidad']
-                
-                # Asignar coordenadas (Buga por defecto si no se encuentra)
                 map_data['lat'] = map_data['Ciudad'].apply(lambda x: coords.get(x, [3.9, -76.3])[0])
                 map_data['lon'] = map_data['Ciudad'].apply(lambda x: coords.get(x, [3.9, -76.3])[1])
 
                 fig_map = px.scatter_mapbox(
-                    map_data, 
-                    lat="lat", 
-                    lon="lon", 
-                    size="Cantidad", 
-                    color="Cantidad",
-                    color_continuous_scale="RdPu", 
-                    size_max=40, 
-                    zoom=7,
-                    mapbox_style="carto-positron",
-                    title="Densidad de Ciudadanos por Ciudad",
-                    hover_name="Ciudad"
+                    map_data, lat="lat", lon="lon", size="Cantidad", color="Cantidad",
+                    color_continuous_scale="RdPu", size_max=40, zoom=7,
+                    mapbox_style="carto-positron", hover_name="Ciudad"
                 )
                 st.plotly_chart(fig_map, use_container_width=True)
-        else: st.info("Sin registros aún.")
+        else: st.info("Sin registros para analizar.")
