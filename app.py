@@ -26,7 +26,6 @@ st.markdown("""
     .stButton>button:hover { background-color: #C2185B !important; border-color: #C2185B !important; }
     [data-testid="stSidebar"] { background-color: #FCE4EC !important; }
     .guest-banner { padding: 15px; background-color: #F8BBD0; color: #880E4F !important; border-radius: 8px; text-align: center; border: 1px solid #F48FB1; margin-bottom: 20px;}
-    /* Ajuste para que los labels se vean negros */
     label { color: #333333 !important; font-weight: 500; }
     </style>
     """, unsafe_allow_html=True)
@@ -37,13 +36,13 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapi
 def get_google_sheet_client():
     try:
         if "gcp_service_account" not in st.secrets:
-            st.error("Error: Credenciales 'gcp_service_account' no encontradas en Secrets.")
+            st.error("Error: Credenciales 'gcp_service_account' no encontradas.")
             return None
         creds_dict = st.secrets["gcp_service_account"]
         credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
         return gspread.authorize(credentials)
     except Exception as e:
-        st.error(f"Error de conexión con Google: {e}")
+        st.error(f"Error de conexión: {e}")
         return None
 
 def get_all_data(file_name="Base_Datos_Ciudadanos"):
@@ -52,7 +51,11 @@ def get_all_data(file_name="Base_Datos_Ciudadanos"):
     try:
         sh = client.open(file_name)
         data = sh.sheet1.get_all_records()
-        return pd.DataFrame(data)
+        df = pd.DataFrame(data)
+        if not df.empty:
+            # Limpieza profunda de nombres de columnas para evitar KeyErrors
+            df.columns = [str(c).strip() for c in df.columns]
+        return df
     except Exception:
         return pd.DataFrame()
 
@@ -68,13 +71,25 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
             if "admin_email" in st.secrets:
                 sh.share(st.secrets["admin_email"], perm_type='user', role='writer')
             worksheet = sh.sheet1
-            headers = ["Fecha Registro", "Registrado Por", "Nombre Completo", "Cédula", "Teléfono", "Ocupación", "Dirección", "Barrio", "Ciudad"]
+            # Encabezados exactos según tu Excel actualizado
+            headers = ["Fecha Registro", "Registrado Por", "Nombre", "Cédula", "Teléfono", "Ocupación", "Dirección", "Barrio", "Ciudad", "Puesto votacion"]
             worksheet.append_row(headers)
 
         timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
         usuario_actual = st.session_state.get("user_name", "Desconocido")
-        row = [timestamp, usuario_actual, data_dict["nombre"], data_dict["cedula"], data_dict["telefono"],
-               data_dict["ocupacion"], data_dict["direccion"], data_dict["barrio"], data_dict["ciudad"]]
+        
+        row = [
+            timestamp, 
+            usuario_actual, 
+            data_dict["nombre"], 
+            data_dict["cedula"], 
+            data_dict["telefono"],
+            data_dict["ocupacion"], 
+            data_dict["direccion"], 
+            data_dict["barrio"], 
+            data_dict["ciudad"],
+            data_dict.get("puesto", "") # Nuevo campo
+        ]
         worksheet.append_row(row)
         return True
     except Exception as e:
@@ -113,8 +128,8 @@ def check_session():
         return False
     return True
 
-# --- INICIALIZACIÓN DE ESTADO DEL FORMULARIO ---
-campos_form = ["nombre", "cedula", "telefono", "ocupacion", "direccion", "barrio", "ciudad"]
+# --- INICIALIZACIÓN DE ESTADO ---
+campos_form = ["nombre", "cedula", "telefono", "ocupacion", "direccion", "barrio", "ciudad", "puesto"]
 for campo in campos_form:
     if f"val_{campo}" not in st.session_state:
         st.session_state[f"val_{campo}"] = "" if campo != "ciudad" else "BUGA"
@@ -122,10 +137,8 @@ for campo in campos_form:
 # --- FLUJO PRINCIPAL ---
 if check_session():
     usuario = st.session_state.user_name
-    
-    # Barra Lateral
     st.sidebar.markdown(f"## Hola, **{usuario.capitalize()}**")
-    opcion = st.sidebar.radio("Navegación:", ["📝 Registro Nuevo", "🔍 Búsqueda Rápida", "📊 Estadísticas y Mapa"])
+    opcion = st.sidebar.radio("Navegación:", ["📝 Registro Nuevo", "🔍 Búsqueda Rápida", "📊 Estadísticas"])
     
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state.clear()
@@ -133,32 +146,30 @@ if check_session():
 
     # --- SECCIÓN 1: REGISTRO ---
     if opcion == "📝 Registro Nuevo":
-        st.title("🗳️ Nuevo Registro de Ciudadano")
+        st.title("🗳️ Nuevo Registro")
         if st.session_state.get("is_guest"):
             st.markdown(f'<div class="guest-banner">👋 Registrando para el equipo de: <b>{usuario.capitalize()}</b></div>', unsafe_allow_html=True)
 
-        # Formulario con clear_on_submit=False para controlar el borrado manualmente
         with st.form("registro_form", clear_on_submit=False):
-            st.subheader("Información Personal")
             col1, col2 = st.columns(2)
-            
             with col1:
                 in_nombre = st.text_input("Nombre Completo", value=st.session_state.val_nombre)
-                in_cedula = st.text_input("Número de Cédula", value=st.session_state.val_cedula, help="Solo números")
-                in_telefono = st.text_input("Número de Teléfono", value=st.session_state.val_telefono, help="Solo números")
-            
+                in_cedula = st.text_input("Número de Cédula", value=st.session_state.val_cedula)
+                in_telefono = st.text_input("Número de Teléfono", value=st.session_state.val_telefono)
             with col2:
                 in_ocupacion = st.text_input("Ocupación", value=st.session_state.val_ocupacion)
                 in_direccion = st.text_input("Dirección", value=st.session_state.val_direccion)
                 in_barrio = st.text_input("Barrio", value=st.session_state.val_barrio)
             
-            in_ciudad = st.text_input("Ciudad", value=st.session_state.val_ciudad)
+            c_map1, c_map2 = st.columns(2)
+            in_ciudad = c_map1.text_input("Ciudad", value=st.session_state.val_ciudad)
+            in_puesto = c_map2.text_input("Puesto de Votación (Opcional)", value=st.session_state.val_puesto)
             
             st.markdown("---")
             enviar = st.form_submit_button("✅ Guardar Registro")
 
             if enviar:
-                # 1. Guardar temporalmente en session_state lo que el usuario escribió
+                # Persistencia manual del estado
                 st.session_state.val_nombre = in_nombre
                 st.session_state.val_cedula = in_cedula
                 st.session_state.val_telefono = in_telefono
@@ -166,95 +177,70 @@ if check_session():
                 st.session_state.val_direccion = in_direccion
                 st.session_state.val_barrio = in_barrio
                 st.session_state.val_ciudad = in_ciudad
+                st.session_state.val_puesto = in_puesto
 
-                # 2. Validaciones
                 errores = []
-                
-                # Campos vacíos
+                # Validación obligatoria excepto puesto
                 if not all([in_nombre.strip(), in_cedula.strip(), in_telefono.strip(), in_ocupacion.strip(), 
                             in_direccion.strip(), in_barrio.strip(), in_ciudad.strip()]):
-                    errores.append("⚠️ Todos los campos son obligatorios.")
+                    errores.append("⚠️ Todos los campos (excepto Puesto) son obligatorios.")
                 
-                # Solo números en Cédula y Teléfono
                 if in_cedula.strip() and not in_cedula.strip().isdigit():
-                    errores.append("❌ La Cédula debe contener solo números.")
+                    errores.append("❌ La Cédula debe ser solo números.")
                 
                 if in_telefono.strip() and not in_telefono.strip().isdigit():
-                    errores.append("❌ El Teléfono debe contener solo números.")
+                    errores.append("❌ El Teléfono debe ser solo números.")
 
                 if errores:
-                    for error in errores:
-                        st.error(error)
+                    for error in errores: st.error(error)
                 else:
-                    # 3. Procesar Envío
                     data = {
-                        "nombre": in_nombre.strip().upper(),
-                        "cedula": in_cedula.strip(),
-                        "telefono": in_telefono.strip(),
-                        "ocupacion": in_ocupacion.strip().upper(),
-                        "direccion": in_direccion.strip().upper(),
-                        "barrio": in_barrio.strip().upper(),
-                        "ciudad": in_ciudad.strip().upper()
+                        "nombre": in_nombre.strip().upper(), "cedula": in_cedula.strip(),
+                        "telefono": in_telefono.strip(), "ocupacion": in_ocupacion.strip().upper(),
+                        "direccion": in_direccion.strip().upper(), "barrio": in_barrio.strip().upper(),
+                        "ciudad": in_ciudad.strip().upper(), "puesto": in_puesto.strip().upper()
                     }
-                    
-                    with st.spinner("Guardando en la base de datos..."):
-                        if save_to_drive(data):
-                            st.success(f"✅ ¡Registro de {in_nombre.upper()} guardado exitosamente!")
-                            
-                            # 4. Limpiar el formulario solo en éxito
-                            for campo in campos_form:
-                                st.session_state[f"val_{campo}"] = "" if campo != "ciudad" else "BUGA"
-                            
-                            time.sleep(2)
-                            st.rerun()
+                    if save_to_drive(data):
+                        st.success(f"✅ ¡Registro de {in_nombre.upper()} guardado!")
+                        for campo in campos_form:
+                            st.session_state[f"val_{campo}"] = "" if campo != "ciudad" else "BUGA"
+                        time.sleep(2)
+                        st.rerun()
 
     # --- SECCIÓN 2: BÚSQUEDA ---
     elif opcion == "🔍 Búsqueda Rápida":
-        st.title("🔍 Consulta de Ciudadanos")
+        st.title("🔍 Consulta")
         df = get_all_data()
         if not df.empty:
             busqueda = st.text_input("Buscar por Nombre o Cédula:").upper()
             if busqueda:
                 mask = df.astype(str).apply(lambda row: row.str.contains(busqueda).any(), axis=1)
-                resultado = df[mask]
-                if not resultado.empty:
-                    st.dataframe(resultado, use_container_width=True)
-                else: st.warning("No se encontraron coincidencias.")
+                st.dataframe(df[mask], use_container_width=True)
             else:
-                st.info("Mostrando los registros más recientes:")
                 st.dataframe(df.tail(15), use_container_width=True)
-        else: st.warning("Base de datos vacía.")
+        else: st.warning("Sin datos.")
 
     # --- SECCIÓN 3: ESTADÍSTICAS ---
-    elif opcion == "📊 Estadísticas y Mapa":
-        st.title("📊 Análisis de Registros")
+    elif opcion == "📊 Estadísticas":
+        st.title("📊 Análisis de Datos")
         df = get_all_data()
-        
         if not df.empty:
+            # Usar nombres de columnas flexibles
+            col_nombre = 'Nombre' if 'Nombre' in df.columns else df.columns[2]
+            col_ciudad = 'Ciudad' if 'Ciudad' in df.columns else 'Ciudad'
+            col_lider = 'Registrado Por' if 'Registrado Por' in df.columns else df.columns[1]
+
             m1, m2, m3 = st.columns(3)
-            m1.metric("Total Registrados", len(df))
-            m2.metric("Ciudades Cubiertas", df['Ciudad'].nunique())
-            m3.metric("Último Registro", df.iloc[-1]['Nombre Completo'] if not df.empty else "N/A")
+            m1.metric("Total", len(df))
+            m2.metric("Ciudades", df[col_ciudad].nunique() if col_ciudad in df.columns else 0)
+            m3.metric("Último", df.iloc[-1][col_nombre] if col_nombre in df.columns else "N/A")
 
             c1, c2 = st.columns(2)
             with c1:
-                st.subheader("Concentración por Ciudad")
-                fig_pie = px.pie(df, names='Ciudad', color_discrete_sequence=px.colors.sequential.RdPu)
-                st.plotly_chart(fig_pie, use_container_width=True)
-            
+                st.subheader("Por Ciudad")
+                if col_ciudad in df.columns:
+                    st.plotly_chart(px.pie(df, names=col_ciudad, color_discrete_sequence=px.colors.sequential.RdPu), use_container_width=True)
             with c2:
-                st.subheader("Desempeño de Líderes")
-                fig_bar = px.bar(df['Registrado Por'].value_counts(), color_discrete_sequence=['#D81B60'])
-                st.plotly_chart(fig_bar, use_container_width=True)
-
-            # Mapa
-            st.subheader("📍 Cobertura Geográfica")
-            coords = {'BUGA': [3.9009, -76.3008], 'CALI': [3.4516, -76.5320], 'PALMIRA': [3.5394, -76.3036], 'TULUA': [4.0847, -76.1954]}
-            map_df = df['Ciudad'].str.upper().value_counts().reset_index()
-            map_df.columns = ['Ciudad', 'Cantidad']
-            map_df['lat'] = map_df['Ciudad'].apply(lambda x: coords.get(x.strip(), [3.9, -76.3])[0])
-            map_df['lon'] = map_df['Ciudad'].apply(lambda x: coords.get(x.strip(), [3.9, -76.3])[1])
-            
-            fig_map = px.scatter_mapbox(map_df, lat="lat", lon="lon", size="Cantidad", color="Cantidad",
-                                      color_continuous_scale="RdPu", zoom=7, mapbox_style="carto-positron")
-            st.plotly_chart(fig_map, use_container_width=True)
+                st.subheader("Por Líder")
+                st.plotly_chart(px.bar(df[col_lider].value_counts(), color_discrete_sequence=['#D81B60']), use_container_width=True)
+        else: st.info("Sin registros aún.")
