@@ -145,7 +145,7 @@ if check_session():
     # BARRA LATERAL
     st.sidebar.markdown(f"### 👤 Usuario: **{usuario.capitalize()}**")
     
-    # --- RESTRICCIÓN DE ACCESO ---
+    # --- RESTRICCIÓN DE ACCESO A MÓDULOS DE DATOS ---
     # Solo estos usuarios pueden ver estadísticas y búsqueda rápida
     USUARIOS_CON_ACCESO_TOTAL = ["fabian", "xammy", "brayan"]
     es_admin = usuario.lower() in USUARIOS_CON_ACCESO_TOTAL and not st.session_state.get("is_guest", False)
@@ -155,12 +155,12 @@ if check_session():
     else:
         opciones_menu = ["📝 Registro Nuevo"]
         if not st.session_state.get("is_guest", False):
-            st.sidebar.warning("Acceso limitado: Solo módulo de registro.")
+            st.sidebar.warning("Acceso limitado: Registro habilitado.")
 
     opcion = st.sidebar.radio("Navegación:", opciones_menu)
     
-    # GENERADOR DE QR (Solo administradores)
-    if es_admin:
+    # GENERADOR DE QR (Habilitado para TODOS los usuarios con cuenta, excepto invitados)
+    if not st.session_state.get("is_guest", False):
         with st.sidebar.expander("📱 Generar QR", expanded=False):
             st.write("QR para que otros se registren bajo tu nombre:")
             url_input = st.text_input("URL Base:", value=BASE_URL)
@@ -209,7 +209,6 @@ if check_session():
             enviar = st.form_submit_button("✅ Guardar Registro")
 
             if enviar:
-                # Mantener la información en el formulario si hay error
                 st.session_state.val_nombre = in_nombre
                 st.session_state.val_cedula = in_cedula
                 st.session_state.val_telefono = in_telefono
@@ -220,12 +219,10 @@ if check_session():
                 st.session_state.val_puesto = in_puesto
 
                 errores = []
-                # Validación de campos vacíos
                 if not all([in_nombre.strip(), in_cedula.strip(), in_telefono.strip(), in_ocupacion.strip(), 
                             in_direccion.strip(), in_barrio.strip(), in_ciudad.strip()]):
                     errores.append("⚠️ Todos los campos (excepto Puesto) son obligatorios.")
                 
-                # Validación numérica estricta
                 if in_cedula.strip() and not in_cedula.strip().isdigit():
                     errores.append("❌ La Cédula debe contener solo números.")
                 
@@ -244,13 +241,12 @@ if check_session():
                     with st.spinner("Guardando registro..."):
                         if save_to_drive(data):
                             st.success(f"✅ ¡Registro de {in_nombre.upper()} guardado!")
-                            # Limpiar sesión solo después de éxito
                             for campo in campos_form:
                                 st.session_state[f"val_{campo}"] = "" if campo != "ciudad" else "BUGA"
                             time.sleep(2)
                             st.rerun()
 
-    # --- SECCIÓN 2: BÚSQUEDA (Solo Admin) ---
+    # --- SECCIÓN 2: BÚSQUEDA (Restringido) ---
     elif opcion == "🔍 Búsqueda Rápida" and es_admin:
         st.title("🔍 Consulta de Base de Datos")
         df = get_all_data()
@@ -264,7 +260,7 @@ if check_session():
                 st.dataframe(df.tail(15), use_container_width=True)
         else: st.warning("No hay datos disponibles.")
 
-    # --- SECCIÓN 3: ESTADÍSTICAS (Solo Admin) ---
+    # --- SECCIÓN 3: ESTADÍSTICAS (Restringido) ---
     elif opcion == "📊 Estadísticas" and es_admin:
         st.title("📊 Análisis de Gestión")
         df = get_all_data()
