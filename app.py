@@ -122,7 +122,7 @@ def check_session():
             user = st.text_input("Usuario").lower().strip()
             password = st.text_input("Contraseña", type="password")
             if st.form_submit_button("Ingresar"):
-                credenciales = {"fabian": "1234", "xammy": "1234", "brayan": "1234", "DiegMonta": "1234"}
+                credenciales = {"fabian": "1234", "xammy": "1234", "brayan": "1234", "DiegoMonta": "1234"}
                 if user in credenciales and credenciales[user] == password:
                     st.session_state.logged_in = True
                     st.session_state.user_name = user
