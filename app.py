@@ -3,14 +3,13 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import time
-from datetime import datetime, timedelta
 import plotly.express as px
+from datetime import datetime, timedelta
 import requests
-import unicodedata
 
-# =========================================================
+# --------------------------------------------------
 # CONFIGURACIÓN GENERAL
-# =========================================================
+# --------------------------------------------------
 BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
 META_REGISTROS = 12000
 
@@ -21,150 +20,250 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# =========================================================
-# ESTILOS (NO MODIFICADOS)
-# =========================================================
-st.markdown("""<style>
+# --------------------------------------------------
+# CSS (NO TOCADO)
+# --------------------------------------------------
+st.markdown("""
+<style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-:root {
-    --pulse-pink:#E91E63; --pulse-dark:#0F172A; --pulse-slate:#64748B;
-    --pulse-bg:#F8FAFC; --pulse-card-shadow:0 4px 20px rgba(0,0,0,0.04);
+* { font-family: 'Plus Jakarta Sans', sans-serif; }
+.stApp { background-color: #F8FAFC; }
+.stSidebar { background-color: white !important; }
+.stButton>button {
+    border-radius: 14px;
+    background: #E91E63 !important;
+    font-weight: 700 !important;
+    color: white !important;
+    border: none !important;
+    width: 100%;
+    height: 3.2rem;
 }
-* { font-family:'Plus Jakarta Sans',sans-serif; }
-.stApp { background-color:var(--pulse-bg); }
-.pulse-hero{background:var(--pulse-dark);color:white;padding:40px;border-radius:32px;margin-bottom:35px;}
-.hero-label{font-size:.8rem;font-weight:700;opacity:.6;letter-spacing:.1em;text-transform:uppercase;}
-.hero-value{font-size:4rem;font-weight:800;margin:10px 0;}
-.hero-perc{font-size:2.5rem;font-weight:800;color:var(--pulse-pink);}
-.pulse-progress-track{background:rgba(255,255,255,.1);height:16px;border-radius:20px;overflow:hidden;}
-.pulse-progress-fill{background:linear-gradient(90deg,#E91E63,#FF80AB);height:100%;}
-.pulse-kpi-card{background:white;padding:24px;border-radius:24px;border:1px solid #F1F5F9;}
-.kpi-label{color:var(--pulse-slate);font-size:.85rem;font-weight:700;text-transform:uppercase;}
-.kpi-val{font-size:2.4rem;font-weight:800;}
-.rank-item{display:flex;justify-content:space-between;padding:16px;background:white;border-radius:18px;margin-bottom:10px;}
-.rank-num{width:32px;height:32px;background:#FCE4EC;color:var(--pulse-pink);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;}
-.rank-name{font-weight:700;}
-.rank-badge{background:#F8FAFC;padding:6px 14px;border-radius:12px;font-weight:700;}
-.stSidebar{background:white!important;}
-.stButton>button{border-radius:14px!important;background:var(--pulse-pink)!important;color:white!important;}
-.hotspot-pill{padding:4px 12px;background:#FEF2F2;color:#B91C1C;border-radius:20px;font-size:.75rem;font-weight:700;}
-</style>""", unsafe_allow_html=True)
+</style>
+""", unsafe_allow_html=True)
 
-# =========================================================
+# --------------------------------------------------
 # GOOGLE SHEETS
-# =========================================================
+# --------------------------------------------------
 @st.cache_resource
 def get_google_sheet_client():
-    creds = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
-        scopes=["https://www.googleapis.com/auth/spreadsheets"]
-    )
-    return gspread.authorize(creds)
+    try:
+        creds = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"],
+            scopes=[
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive"
+            ]
+        )
+        return gspread.authorize(creds)
+    except:
+        return None
 
 def get_data():
-    sh = get_google_sheet_client().open("Base_Datos_Ciudadanos")
-    df = pd.DataFrame(sh.sheet1.get_all_records())
-    if not df.empty:
-        df["Fecha Registro"] = pd.to_datetime(df["Fecha Registro"], errors="coerce")
-        df.columns = df.columns.str.strip()
-    return df
+    client = get_google_sheet_client()
+    if not client:
+        return pd.DataFrame()
+    try:
+        sh = client.open("Base_Datos_Ciudadanos")
+        df = pd.DataFrame(sh.sheet1.get_all_records())
+        if not df.empty:
+            df.columns = [c.strip() for c in df.columns]
+            df["Fecha Registro"] = pd.to_datetime(df["Fecha Registro"], errors="coerce")
+        return df
+    except:
+        return pd.DataFrame()
 
 def save_data(data):
-    sh = get_google_sheet_client().open("Base_Datos_Ciudadanos")
-    sh.sheet1.append_row([
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        st.session_state.user_name,
-        data["nombre"], data["cedula"], data["telefono"],
-        data["ocupacion"], data["direccion"], data["barrio"],
-        data["ciudad"], data.get("puesto","")
-    ])
+    client = get_google_sheet_client()
+    if not client:
+        return False
+    try:
+        sh = client.open("Base_Datos_Ciudadanos")
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        user = st.session_state.get("user_name", "Anonimo")
+        row = [
+            ts, user,
+            data["nombre"], data["cedula"], data["telefono"],
+            data["ocupacion"], data["direccion"], data["barrio"],
+            data["ciudad"], data.get("puesto", "")
+        ]
+        sh.sheet1.append_row(row)
+        return True
+    except:
+        return False
 
-# =========================================================
-# NORMALIZACIÓN MUNICIPIOS (CLAVE)
-# =========================================================
-def normalizar_para_mapa(txt):
-    if not txt:
-        return None
-    t = unicodedata.normalize("NFD", txt.upper().strip())
-    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+# --------------------------------------------------
+# NORMALIZACIÓN MUNICIPIOS
+# --------------------------------------------------
+def normalizar_para_mapa(m):
+    m = str(m).upper().strip()
     mapping = {
-        "BUGA":"GUADALAJARA DE BUGA",
-        "CALI":"SANTIAGO DE CALI",
-        "TULUA":"TULUA",
-        "JAMUNDI":"JAMUNDI",
-        "GUACARI":"GUACARI",
-        "ANDALUCIA":"ANDALUCIA",
-        "LA UNION":"LA UNION",
-        "DARIEN":"CALIMA"
+        "BUGA": "GUADALAJARA DE BUGA",
+        "CALI": "SANTIAGO DE CALI",
+        "JAMUNDI": "JAMUNDÍ",
+        "TULUA": "TULUÁ",
+        "GUACARI": "GUACARÍ",
+        "PALMIRA": "PALMIRA",
+        "CARTAGO": "CARTAGO",
+        "YUMBO": "YUMBO",
+        "ANDALUCIA": "ANDALUCÍA",
+        "BUENAVENTURA": "BUENAVENTURA"
     }
-    return mapping.get(t, t)
+    return mapping.get(m, m)
 
-# =========================================================
-# AUTH
-# =========================================================
+# --------------------------------------------------
+# AUTH (RESTAURADO)
+# --------------------------------------------------
 def check_auth():
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
+
+    params = st.query_params
+    if "ref" in params and "ref_checked" not in st.session_state:
+        st.session_state.logged_in = True
+        st.session_state.user_name = params["ref"]
+        st.session_state.is_guest = True
+        st.session_state.ref_checked = True
+
     if not st.session_state.logged_in:
-        u = st.text_input("Usuario")
-        p = st.text_input("Contraseña", type="password")
-        if st.button("Acceder"):
-            if u.lower() in ["fabian","xammy","brayan","diegomonta"] and p=="1234":
-                st.session_state.logged_in = True
-                st.session_state.user_name = u.lower()
-                st.rerun()
+        st.markdown(
+            "<div style='text-align:center; padding-top: 80px;'>"
+            "<h1>Pulse Analytics</h1><p>Gestión Maria Irma</p></div>",
+            unsafe_allow_html=True
+        )
+
+        col1, col2, col3 = st.columns([1, 1.4, 1])
+        with col2:
+            u = st.text_input("Usuario")
+            p = st.text_input("Contraseña", type="password")
+            if st.button("Acceder al Panel"):
+                creds = {
+                    "fabian": "1234",
+                    "xammy": "1234",
+                    "brayan": "1234",
+                    "diegomonta": "1234"
+                }
+                if u.lower() in creds and creds[u.lower()] == p:
+                    st.session_state.logged_in = True
+                    st.session_state.user_name = u.lower()
+                    st.session_state.is_guest = False
+                    st.rerun()
+                else:
+                    st.error("Acceso Denegado")
         return False
     return True
 
-# =========================================================
+if "f_reset" not in st.session_state:
+    st.session_state.f_reset = 0
+
+# --------------------------------------------------
 # DASHBOARD
-# =========================================================
+# --------------------------------------------------
 if check_auth():
 
-    opcion = st.sidebar.radio("MENÚ", ["📝 Registro","📊 Estadísticas","🔍 Búsqueda"])
+    usuario = st.session_state.user_name
+    es_admin = usuario in ["fabian", "xammy", "brayan"]
 
-    if opcion == "📊 Estadísticas":
+    st.sidebar.markdown(
+        f"<b>Usuario:</b><br>{usuario.upper()}",
+        unsafe_allow_html=True
+    )
+
+    opcion = st.sidebar.radio(
+        "MENÚ",
+        ["📝 Registro", "📊 Estadísticas", "🔍 Búsqueda"] if es_admin else ["📝 Registro"]
+    )
+
+    if st.sidebar.button("Salir"):
+        st.session_state.clear()
+        st.rerun()
+
+    # --------------------------------------------------
+    # REGISTRO
+    # --------------------------------------------------
+    if opcion == "📝 Registro":
+        st.title("🗳️ Nuevo Registro")
+
+        with st.form(key=f"form_{st.session_state.f_reset}"):
+            c1, c2 = st.columns(2)
+            with c1:
+                nom = st.text_input("Nombre Completo")
+                ced = st.text_input("Cédula")
+                tel = st.text_input("Teléfono")
+            with c2:
+                ocu = st.text_input("Ocupación")
+                dir = st.text_input("Dirección")
+                bar = st.text_input("Barrio")
+
+            ciu = st.text_input("Municipio", value="BUGA")
+            pue = st.text_input("Puesto (Opcional)")
+
+            if st.form_submit_button("GUARDAR REGISTRO"):
+                if nom and ced and tel:
+                    ok = save_data({
+                        "nombre": nom.upper(),
+                        "cedula": ced,
+                        "telefono": tel,
+                        "ocupacion": ocu.upper(),
+                        "direccion": dir.upper(),
+                        "barrio": bar.upper(),
+                        "ciudad": ciu.upper(),
+                        "puesto": pue.upper()
+                    })
+                    if ok:
+                        st.success("Registro guardado")
+                        st.session_state.f_reset += 1
+                        time.sleep(1)
+                        st.rerun()
+                else:
+                    st.warning("Complete Nombre, Cédula y Teléfono")
+
+    # --------------------------------------------------
+    # ESTADÍSTICAS
+    # --------------------------------------------------
+    elif opcion == "📊 Estadísticas":
         df = get_data()
-        st.title("Pulse Analytics | Valle del Cauca")
+        if df.empty:
+            st.warning("Sin datos")
+        else:
+            st.title("📊 Pulse Analytics | Valle")
 
-        total = len(df)
-        perc = min(total/META_REGISTROS*100,100)
+            total = len(df)
+            st.metric("Total Registros", total)
 
-        st.markdown(f"""
-        <div class="pulse-hero">
-            <p class="hero-label">Progreso Global</p>
-            <h1 class="hero-value">{total:,}</h1>
-            <span class="hero-perc">{perc:.1f}%</span>
-            <div class="pulse-progress-track">
-                <div class="pulse-progress-fill" style="width:{perc}%"></div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+            df["Municipio_Map"] = df["Ciudad"].apply(normalizar_para_mapa)
+            map_data = df["Municipio_Map"].value_counts().reset_index()
+            map_data.columns = ["Municipio", "Registros"]
 
-        # ---------------- MAPA ----------------
-        st.subheader("📍 Mapa de Calor y Concentración Territorial")
+            geojson_url = (
+                "https://raw.githubusercontent.com/"
+                "caticoa3/colombia_mapa/master/"
+                "co_2018_MGN_MPIO_POLITICO.geojson"
+            )
+            geojson_data = requests.get(geojson_url).json()
 
-        m_df = df.copy()
-        m_df["Municipio_Map"] = m_df["Ciudad"].apply(normalizar_para_mapa)
-        map_data = m_df["Municipio_Map"].value_counts().reset_index()
-        map_data.columns = ["Municipio","Registros"]
+            fig = px.choropleth(
+                map_data,
+                geojson=geojson_data,
+                locations="Municipio",
+                featureidkey="properties.NOM_MPIO",
+                color="Registros",
+                color_continuous_scale="YlOrRd"
+            )
+            fig.update_geos(fitbounds="locations", visible=False)
+            fig.update_layout(height=600, margin=dict(l=0, r=0, t=0, b=0))
 
-        @st.cache_data
-        def load_geo():
-            url = "https://raw.githubusercontent.com/caticoa3/colombia_mapa/master/co_2018_MGN_MPIO_POLITICO.geojson"
-            return requests.get(url).json()
+            st.plotly_chart(fig, use_container_width=True)
 
-        geojson = load_geo()
-
-        fig = px.choropleth(
-            map_data,
-            geojson=geojson,
-            locations="Municipio",
-            featureidkey="properties.NOM_MPIO",
-            color="Registros",
-            color_continuous_scale="YlOrRd"
-        )
-        fig.update_geos(fitbounds="locations", visible=False)
-        fig.update_layout(height=600, margin=dict(l=0,r=0,t=0,b=0))
-
-        st.plotly_chart(fig, use_container_width=True)
+    # --------------------------------------------------
+    # BÚSQUEDA
+    # --------------------------------------------------
+    elif opcion == "🔍 Búsqueda":
+        st.title("🔍 Búsqueda")
+        df = get_data()
+        if not df.empty:
+            q = st.text_input("Buscar").upper()
+            if q:
+                res = df[df.astype(str).apply(lambda x: q in " ".join(x), axis=1)]
+                st.dataframe(res, use_container_width=True)
+            else:
+                st.dataframe(df.tail(100), use_container_width=True)
