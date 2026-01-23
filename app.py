@@ -222,15 +222,14 @@ if check_auth():
     # --------------------------------------------------
 elif opcion == "📊 Estadísticas":
 
-    st.title("Pulse Analytics | Valle del Cauca")
+    st.title("📊 Pulse Analytics")
 
     df = get_data()
     if df.empty:
         st.info("No hay datos para mostrar.")
     else:
-        m_df = df.copy()
-        m_df["Municipio_Map"] = m_df["Ciudad"].apply(normalizar_para_mapa)
-        map_data = m_df["Municipio_Map"].value_counts().reset_index()
+        df["Municipio_Map"] = df["Ciudad"].apply(normalizar_para_mapa)
+        map_data = df["Municipio_Map"].value_counts().reset_index()
         map_data.columns = ["Municipio", "Registros"]
 
         c_map_view, c_map_stats = st.columns([2, 1])
@@ -272,6 +271,7 @@ elif opcion == "📊 Estadísticas":
     # BÚSQUEDA
     # --------------------------------------------------
    elif opcion == "🔍 Búsqueda":
+
     st.title("🔍 Explorador de Registros")
 
     df = get_data()
@@ -279,10 +279,14 @@ elif opcion == "📊 Estadísticas":
         st.info("No hay datos para mostrar.")
     else:
         q = st.text_input("Buscar...").upper()
+
         if q:
             res = df[df.astype(str).apply(
-                lambda x: x.str.upper().str.contains(q, na=False)
-            , axis=1)]
+                lambda x: x.str.upper().str.contains(q, na=False),
+                axis=1
+            )]
             st.dataframe(res, use_container_width=True)
         else:
+            st.dataframe(df.tail(100), use_container_width=True)
+
             st.dataframe(df.tail(100), use_container_width=True)
