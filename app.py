@@ -122,7 +122,7 @@ def apply_custom_styles():
         </style>
     """, unsafe_allow_html=True)
 
-# --- 4. CONEXIÓN DATOS (GOOGLE SHEETS) ---
+# --- 4. CONEXIÓN DATOS ---
 @st.cache_resource
 def get_google_sheet_client():
     try:
@@ -162,11 +162,33 @@ def save_data(data_dict):
         return True
     except Exception: return False
 
+@st.cache_data(ttl=3600)
+def get_valle_geojson():
+    """Descarga y filtra el GeoJSON para el Valle del Cauca"""
+    try:
+        url = "https://raw.githubusercontent.com/santiblanko/colombia.geojson/master/mpio.json"
+        response = requests.get(url, timeout=10)
+        data = response.json()
+        
+        # Filtrar solo municipios del Valle del Cauca para ligereza
+        valle_features = []
+        for feature in data["features"]:
+            # Normalizamos el departamento para comparar
+            dpto = normalizar(feature["properties"].get("DPTO_CNMBR", ""))
+            if dpto == "VALLE DEL CAUCA":
+                # Normalizamos el municipio para el mapeo con los datos
+                feature["properties"]["MPIO_NORM"] = normalizar(feature["properties"].get("MPIO_CNMBR", ""))
+                valle_features.append(feature)
+        
+        data["features"] = valle_features
+        return data
+    except Exception as e:
+        return None
+
 # --- 5. LOGICA DE AUTENTICACIÓN ---
 def check_auth():
     if "logged_in" not in st.session_state: st.session_state.logged_in = False
     
-    # Manejo de referidos por URL
     params = st.query_params
     if "ref" in params and "ref_checked" not in st.session_state:
         st.session_state.logged_in = True
@@ -271,25 +293,18 @@ def view_estadisticas():
     m_df['Municipio_Map'] = m_df['Ciudad'].apply(normalizar_para_mapa)
     map_data = m_df['Municipio_Map'].value_counts().reset_index()
     map_data.columns = ['Municipio', 'Registros']
+    map_data["Municipio_Norm"] = map_data["Municipio"].apply(normalizar)
     
     c_map_view, c_map_stats = st.columns([2, 1])
     
     with c_map_view:
-        try:
-            geojson_url = "https://raw.githubusercontent.com/santiblanko/colombia.geojson/master/mpio.json"
-            geojson_data = requests.get(geojson_url).json()
-            
-            # Limpiar GeoJSON para Valle del Cauca y normalizar nombres
-            for f in geojson_data["features"]:
-                f["properties"]["MPIO_CNMBR"] = normalizar(f["properties"]["MPIO_CNMBR"])
-            
-            map_data["Municipio_Norm"] = map_data["Municipio"].apply(normalizar)
-            
+        geojson_data = get_valle_geojson()
+        if geojson_data:
             fig = px.choropleth(
                 map_data, 
                 geojson=geojson_data, 
                 locations='Municipio_Norm',
-                featureidkey="properties.MPIO_CNMBR", 
+                featureidkey="properties.MPIO_NORM", 
                 color='Registros',
                 color_continuous_scale="Reds",
                 template="plotly_white",
@@ -298,8 +313,9 @@ def view_estadisticas():
             fig.update_geos(fitbounds="locations", visible=False)
             fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=500)
             st.plotly_chart(fig, use_container_width=True)
-        except:
-            st.error("Error cargando mapa interactivo.")
+        else:
+            st.warning("El servidor de mapas no está disponible temporalmente. Mostrando tabla de datos.")
+            st.dataframe(map_data[['Municipio', 'Registros']], use_container_width=True)
 
     with c_map_stats:
         st.write("**🔥 Hotspots (Top 5)**")
@@ -346,6 +362,7 @@ def view_busqueda():
     if not df.empty:
         q = st.text_input("Buscar por nombre, cédula o municipio...").upper()
         if q:
+            # Filtrar en todas las columnas convirtiendo a string
             res = df[df.astype(str).apply(lambda x: q in x.str.upper().values, axis=1)]
             st.dataframe(res, use_container_width=True)
         else:
@@ -359,7 +376,6 @@ if __name__ == "__main__":
         usuario = st.session_state.user_name
         es_admin = usuario.lower() in USUARIOS_ADMIN and not st.session_state.get("is_guest", False)
 
-        # Sidebar
         st.sidebar.markdown(f"""
             <div style='background:#F1F5F9; padding:20px; border-radius:18px; margin-bottom:20px;'>
                 <p style='margin:0; font-size:0.75rem; font-weight:700; color:#64748B;'>SESIÓN PULSE</p>
@@ -374,7 +390,6 @@ if __name__ == "__main__":
             st.session_state.clear()
             st.rerun()
 
-        # Enrutamiento de vistas
         if opcion == "📝 Registro":
             view_registro()
         elif opcion == "📊 Estadísticas":
