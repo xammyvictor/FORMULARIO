@@ -329,53 +329,39 @@ if check_auth():
                         f for f in geojson_data["features"]
                         if f["properties"]["DPTO_CNMBR"] == "VALLE DEL CAUCA"
                     ]
-
-                    
-                    if map_mode == "Coropleta Territorial":
-                        # Mapa de Calor por regiones (Dibujo limpio)
-                        st.write("Columnas:", map_data.columns)
-                        st.write("Filas:", len(map_data))
-                        st.write(map_data.head())
-                        st.write("Municipios en GeoJSON:")
-                        st.write(
-                            sorted(
-                                {f["properties"]["MPIO_CNMBR"] for f in geojson_data["features"]}
+                    map_data["Municipio"] = map_data["Municipio"].apply(normalizar)
+                    for f in geojson_data["features"]:
+                        f["properties"]["MPIO_CNMBR"] = normalizar(
+                            f["properties"]["MPIO_CNMBR"]
+                        )
+                        if map_mode == "Coropleta Territorial":
+                            fig = px.choropleth(
+                                map_data, 
+                                geojson=geojson_data, 
+                                locations='Municipio',
+                                featureidkey="properties.MPIO_CNMBR", 
+                                color='Registros',
+                                color_continuous_scale="YlOrRd",
+                                template="plotly_white",
+                                labels={'Registros': 'Total Registros'}
                             )
-                        )
-                        st.subheader("DEBUG MAPA")
-                        st.write("Columnas map_data:", map_data.columns.tolist())
-                        st.write("Filas map_data:", len(map_data))
-                        st.write("Municipios en map_data:")
-                        st.write(sorted(map_data["Municipio"].astype(str).unique()))
-                        st.write("Municipios en GeoJSON (Valle del Cauca):")
-                        st.write(
-                            sorted(
-                                [f["properties"]["MPIO_CNMBR"] for f in geojson_data["features"]]
+                        else:
+                            fig = px.choropleth(
+                                map_data, 
+                                geojson=geojson_data, 
+                                locations='Municipio',
+                                featureidkey="properties.MPIO_CNMBR",  # <-- CORRECTO
+                                color='Registros',
+                                color_continuous_scale="Reds",
+                                template="plotly_white"
                             )
-                        )
-
-
-
-
-                        
-                        fig = px.choropleth(
-                            map_data, 
-                            geojson=geojson_data, 
-                            locations='Municipio',
-                            featureidkey="properties.MPIO_CNMBR", 
-                            color='Registros',
-                            color_continuous_scale="YlOrRd", # Amarillo -> Naranja -> Rojo (Intuitivo)
-                            template="plotly_white",
-                            labels={'Registros': 'Total Registros'}
-                        )
-                        fig.update_geos(fitbounds="locations", visible=False)
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
+                            fig.update_traces(marker_line_width=0.5, marker_line_color="white")
+                        else:
                         # Mapa de Burbujas / Hotspots sobre el dibujo
                         # Calculamos centroides aproximados o simplemente usamos el dibujo como base
                         fig = px.choropleth(
                             map_data, geojson=geojson_data, locations='Municipio',
-                            featureidkey="properties.name", color='Registros',
+                            featureidkey="properties.MPIO_CNMBR"", color='Registros',
                             color_continuous_scale="Reds", template="plotly_white"
                         )
                         # Añadimos puntos de calor (Burbujas) para resaltar municipios pequeños
