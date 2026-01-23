@@ -149,6 +149,7 @@ def save_data(data_dict):
 # --- NORMALIZACIÓN DE MUNICIPIOS ---
 def normalizar_para_mapa(muni):
     m = str(muni).upper().strip()
+    # Mapeo a nombres oficiales del GeoJSON para asegurar el match
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
@@ -305,13 +306,12 @@ if check_auth():
                 map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots"], horizontal=True)
                 
                 try:
-                    # CARGA DE URL NACIONAL (Respaldo activo)
+                    # URL nacional verificada
                     url_geojson = "https://raw.githubusercontent.com/marcovega/colombia-json/master/colombia.min.json"
                     response = requests.get(url_geojson, timeout=10)
                     data_full = response.json()
                     
-                    # LOGICA ROBUSTA PARA EVITAR 'list indices must be integers'
-                    # Algunos JSON devuelven una lista de features directamente, otros un objeto FeatureCollection
+                    # Verificación de estructura del JSON
                     if isinstance(data_full, list):
                         features_list = data_full
                     elif isinstance(data_full, dict) and 'features' in data_full:
@@ -319,39 +319,42 @@ if check_auth():
                     else:
                         features_list = []
 
-                    # FILTRADO DE FEATURES PARA EL VALLE DEL CAUCA
+                    # FILTRADO ROBUSTO (Ignora mayúsculas/minúsculas en el nombre del departamento)
                     valle_features = [
                         f for f in features_list 
-                        if isinstance(f, dict) and f.get('properties', {}).get('DPTO_CNMBRE') == 'VALLE DEL CAUCA'
+                        if isinstance(f, dict) and str(f.get('properties', {}).get('DPTO_CNMBRE')).upper() == 'VALLE DEL CAUCA'
                     ]
                     
-                    valle_geojson = {
-                        "type": "FeatureCollection",
-                        "features": valle_features
-                    }
-                    
-                    if map_mode == "Coropleta Territorial":
-                        fig = px.choropleth(
-                            map_data, 
-                            geojson=valle_geojson, 
-                            locations='Municipio',
-                            featureidkey="properties.MPIO_CNMBRE", 
-                            color='Registros',
-                            color_continuous_scale="YlOrRd",
-                            template="plotly_white",
-                            labels={'Registros': 'Registros'}
-                        )
+                    if not valle_features:
+                        st.warning("No se encontraron datos geográficos para el Valle del Cauca.")
                     else:
-                        fig = px.choropleth(
-                            map_data, geojson=valle_geojson, locations='Municipio',
-                            featureidkey="properties.MPIO_CNMBRE", color='Registros',
-                            color_continuous_scale="Reds", template="plotly_white"
-                        )
-                        fig.update_traces(marker_line_width=0.5, marker_line_color="white")
+                        valle_geojson = {
+                            "type": "FeatureCollection",
+                            "features": valle_features
+                        }
+                        
+                        if map_mode == "Coropleta Territorial":
+                            fig = px.choropleth(
+                                map_data, 
+                                geojson=valle_geojson, 
+                                locations='Municipio',
+                                featureidkey="properties.MPIO_CNMBRE", 
+                                color='Registros',
+                                color_continuous_scale="YlOrRd",
+                                template="plotly_white",
+                                labels={'Registros': 'Registros'}
+                            )
+                        else:
+                            fig = px.choropleth(
+                                map_data, geojson=valle_geojson, locations='Municipio',
+                                featureidkey="properties.MPIO_CNMBRE", color='Registros',
+                                color_continuous_scale="Reds", template="plotly_white"
+                            )
+                            fig.update_traces(marker_line_width=0.5, marker_line_color="white")
 
-                    fig.update_geos(fitbounds="locations", visible=False)
-                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
-                    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                        fig.update_geos(fitbounds="locations", visible=False)
+                        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
+                        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 except Exception as e:
                     st.error(f"Error procesando el mapa: {e}")
 
