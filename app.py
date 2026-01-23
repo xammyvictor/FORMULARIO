@@ -313,11 +313,10 @@ if check_auth():
                 try:
                     geojson_url = "https://raw.githubusercontent.com/santiblanko/colombia.geojson/master/mpio.json"
                     geojson_data = requests.get(geojson_url).json()
-                    # FILTRAR SOLO VALLE DEL CAUCA
-    geojson_data["features"] = [
-    f for f in geojson_data["features"]
-    if f["properties"]["DPTO_CNMBR"] == "VALLE DEL CAUCA"
-]
+                    geojson_data["features"] = [
+                        f for f in geojson_data["features"]
+                        if f["properties"]["DPTO_CNMBR"] == "VALLE DEL CAUCA"
+                    ]
 
                     
                     if map_mode == "Coropleta Territorial":
