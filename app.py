@@ -251,6 +251,7 @@ if check_auth():
         if not df.empty:
             st.title("Pulse Analytics | Valle del Cauca")
             
+            # --- 1. HERO META ---
             total = len(df)
             perc = min((total / META_REGISTROS) * 100, 100)
             st.markdown(f"""
@@ -269,6 +270,7 @@ if check_auth():
                 </div>
             """, unsafe_allow_html=True)
 
+            # --- 2. KPIs ---
             hoy = datetime.now()
             df['F_S'] = df['Fecha Registro'].dt.date
             v_hoy = len(df[df['F_S'] == hoy.date()])
@@ -281,7 +283,7 @@ if check_auth():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- MAPA RECONSTRUIDO CON FILTRADO ROBUSTO ---
+            # --- 3. MAPA RECONSTRUIDO CON BÚSQUEDA POR CÓDIGO REGIONAL ---
             st.subheader("📍 Mapa de Calor y Concentración Territorial")
             
             m_df = df.copy()
@@ -295,14 +297,13 @@ if check_auth():
                 map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots"], horizontal=True)
                 
                 try:
-                    # Usamos una URL de repositorio estable
+                    # Usamos la URL nacional estable
                     url_geojson = "https://raw.githubusercontent.com/marcovega/colombia-json/master/colombia.min.json"
-                    response = requests.get(url_geojson, timeout=15)
+                    response = requests.get(url_geojson, timeout=20)
                     
                     if response.status_code == 200:
                         data_raw = response.json()
                         
-                        # Extraemos features de forma segura
                         if isinstance(data_raw, dict) and 'features' in data_raw:
                             features_source = data_raw['features']
                         elif isinstance(data_raw, list):
@@ -310,15 +311,17 @@ if check_auth():
                         else:
                             features_source = []
 
-                        # FILTRADO FLEXIBLE PARA EL VALLE DEL CAUCA
-                        # Buscamos en las propiedades comunes de los GeoJSON de Colombia
+                        # FILTRADO INTELIGENTE: Buscamos por código regional '76' (Valle) o nombre
                         valle_features = []
                         for f in features_source:
                             if not isinstance(f, dict): continue
                             props = f.get('properties', {})
-                            # Comprobamos departamento en llaves comunes (mayúsculas y sin espacios)
-                            dpto_nom = str(props.get('DPTO_CNMBRE') or props.get('NOMBRE_DPT') or props.get('dpto', '')).upper().strip()
-                            if dpto_nom == 'VALLE DEL CAUCA':
+                            
+                            # Intentamos detectar el Valle por su código DIVIPOLA (76) o por su nombre
+                            dpto_codigo = str(props.get('DPTO_CCDGO') or props.get('DPTO') or props.get('cod_dpto', ''))
+                            dpto_nombre = str(props.get('DPTO_CNMBRE') or props.get('NOMBRE_DPT') or props.get('departamento', '')).upper()
+                            
+                            if dpto_codigo == '76' or 'VALLE DEL CAUCA' in dpto_nombre:
                                 valle_features.append(f)
                         
                         if valle_features:
@@ -327,8 +330,7 @@ if check_auth():
                                 "features": valle_features
                             }
                             
-                            # Identificamos la llave de municipio (MPIO_CNMBRE es estándar en este archivo)
-                            # Intentamos detectar qué llave tiene los nombres de municipios
+                            # Detectamos la llave de municipio (MPIO_CNMBRE o NOMBRE_MPI)
                             sample_props = valle_features[0].get('properties', {})
                             llave_muni = "MPIO_CNMBRE" if "MPIO_CNMBRE" in sample_props else "NOMBRE_MPI"
 
@@ -355,8 +357,8 @@ if check_auth():
                             fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
                             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                         else:
-                            st.error("No se encontraron geometrías para el Valle del Cauca. Verificando estructura...")
-                            # Debug opcional: st.write(features_source[0]['properties'] if features_source else "Sin datos")
+                            st.warning("⚠️ No se pudieron filtrar las geometrías. Mostrando tabla de datos.")
+                            st.dataframe(map_data)
                     else:
                         st.warning("⚠️ El servidor de mapas no respondió correctamente.")
                 except Exception as e:
@@ -375,7 +377,7 @@ if check_auth():
                 
                 st.metric("Cobertura Regional", f"{len(map_data)} / 42 Municipios")
 
-            # --- RANKING Y TENDENCIA ---
+            # --- 4. RANKING Y TENDENCIA ---
             st.markdown("---")
             c_rank, c_trend = st.columns([1, 1.5])
             
