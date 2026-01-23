@@ -42,6 +42,7 @@ def normalizar_para_mapa(muni):
         "TULUA": "TULUA",
         "GUACARI": "GUACARI",
         "DARIEN": "CALIMA",
+        "CALIMA": "CALIMA",
         "LA UNION": "LA UNION",
         "RIOFRIO": "RIOFRIO",
         "ANDALUCIA": "ANDALUCIA",
@@ -49,7 +50,16 @@ def normalizar_para_mapa(muni):
         "PALMIRA": "PALMIRA",
         "DAGUA": "DAGUA",
         "CARTAGO": "CARTAGO",
-        "EL CERRITO": "EL CERRITO"
+        "EL CERRITO": "EL CERRITO",
+        "BUGALAGRANDE": "BUGALAGRANDE",
+        "CAICEDONIA": "CAICEDONIA",
+        "FLORIDA": "FLORIDA",
+        "GINEBRA": "GINEBRA",
+        "PRADERA": "PRADERA",
+        "RESTREPO": "RESTREPO",
+        "ROLDANILLO": "ROLDANILLO",
+        "SEVILLA": "SEVILLA",
+        "ZARZAL": "ZARZAL"
     }
     return mapping.get(m, m)
 
@@ -294,7 +304,7 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA ---
+    # --- MAPA RECONFIGURADO (ESTILO BLANCO Y DEMARCACIÓN) ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📍 Concentración Territorial (Valle del Cauca)")
     
@@ -308,32 +318,45 @@ def view_estadisticas():
     with c_map_view:
         geojson_data = get_valle_geojson(URL_GITHUB_GEO)
         if geojson_data:
+            # Mapa con fondo blanco limpio
             fig = px.choropleth_mapbox(
                 map_data, 
                 geojson=geojson_data, 
                 locations='ID_MPIO',
                 color='Registros',
                 color_continuous_scale="Reds",
-                mapbox_style="carto-darkmatter", # Estilo Darkmatter profesional
+                mapbox_style="carto-positron", # Fondo blanco/claro
                 center={"lat": 3.85, "lon": -76.3},
-                zoom=7.8,
+                zoom=7.9,
                 opacity=0.8,
                 labels={'Registros': 'Total'}
             )
+            
+            # Demarcación fuerte de municipios
+            fig.update_traces(
+                marker_line_width=2,
+                marker_line_color="#1e293b" # Color pizarra oscuro para los bordes
+            )
+            
             fig.update_layout(
                 margin={"r":0,"t":0,"l":0,"b":0}, 
-                height=600,
-                paper_bgcolor="rgba(0,0,0,0)",
-                coloraxis_colorbar=dict(title="DENSIDAD", thickness=15)
+                height=650,
+                paper_bgcolor="white",
+                coloraxis_colorbar=dict(
+                    title="REGISTROS", 
+                    thickness=20,
+                    len=0.5,
+                    bgcolor="rgba(255,255,255,0.8)"
+                )
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.error("⚠️ No se pudo cargar el archivo GeoJSON desde GitHub.")
+            st.error("⚠️ No se pudo cargar el archivo GeoJSON. Mostrando datos tabulares.")
             st.dataframe(map_data, use_container_width=True)
 
     with c_map_stats:
         st.write("**🔥 Ranking Municipal**")
-        for _, row in map_data.head(6).iterrows():
+        for _, row in map_data.head(8).iterrows():
             st.markdown(f"""
                 <div class="rank-item" style="padding:12px; margin-bottom:8px;">
                     <span style="font-weight:600; font-size:0.9rem;">{row['ID_MPIO']}</span>
