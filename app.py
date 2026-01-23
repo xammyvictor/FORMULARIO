@@ -26,36 +26,41 @@ st.set_page_config(
 
 # --- 2. FUNCIONES DE NORMALIZACIÓN ---
 def normalizar(texto):
-    """Limpia el texto de tildes, espacios y lo pasa a mayúsculas."""
+    """Limpia el texto de tildes, espacios y lo pasa a mayúsculas de forma estricta."""
     if not texto: return ""
     texto = str(texto).upper().strip()
     texto = unicodedata.normalize("NFD", texto)
     texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
+    # Elimina espacios dobles y limpia extremos
     return " ".join(texto.split())
 
 def traducir_nombre_db(muni):
     """
     Traduce nombres comunes de la base de datos al nombre oficial del mapa.
-    Solo se aplica a la base de datos para hacer el 'match' con el GeoJSON.
+    Asegura que 'CALI' coincida con 'SANTIAGO DE CALI'.
     """
     m = normalizar(muni)
     
-    # DICCIONARIO DE TRADUCCIÓN (DB -> MAPA)
+    # CASO ESPECIAL CALI: Forzamos la coincidencia con el GeoJSON del DANE
+    if "CALI" in m:
+        return "SANTIAGO DE CALI"
+    
     mapping = {
-        "CALI": "SANTIAGO DE CALI",
-        "SANTIAGO DE CALI": "SANTIAGO DE CALI",
         "BUGA": "GUADALAJARA DE BUGA",
+        "GUADALAJARA DE BUGA": "GUADALAJARA DE BUGA",
         "JAMUNDI": "JAMUNDI",
         "TULUA": "TULUA",
         "GUACARI": "GUACARI",
         "DARIEN": "CALIMA",
+        "CALIMA": "CALIMA",
         "LA UNION": "LA UNION",
         "RIOFRIO": "RIOFRIO",
         "ANDALUCIA": "ANDALUCIA",
         "YUMBO": "YUMBO",
         "PALMIRA": "PALMIRA",
         "DAGUA": "DAGUA",
-        "CARTAGO": "CARTAGO"
+        "CARTAGO": "CARTAGO",
+        "EL CERRITO": "EL CERRITO"
     }
     return mapping.get(m, m)
 
@@ -186,9 +191,10 @@ def get_valle_geojson(url):
             valle_features = []
             for feature in data["features"]:
                 props = feature["properties"]
-                # Código DANE del Valle del Cauca es 76
-                if str(props.get("DPTO_CCDGO")) == "76":
-                    # El ID del feature será el nombre oficial normalizado (ej. SANTIAGO DE CALI)
+                # Detecta código 76 de forma flexible (string o int)
+                dpto_code = str(props.get("DPTO_CCDGO", "")).strip().lstrip('0')
+                if dpto_code == "76":
+                    # El ID del feature será el nombre oficial normalizado
                     m_name = normalizar(props.get("MPIO_CNMBR", ""))
                     feature["id"] = m_name
                     valle_features.append(feature)
@@ -328,10 +334,10 @@ def view_estadisticas():
                 
                 lons.append(coords_flat[:, 0].mean())
                 lats.append(coords_flat[:, 1].mean())
-                # Usamos el nombre original de la propiedad para la etiqueta visual
+                # Nombre original para etiqueta visual
                 names.append(f["properties"].get("MPIO_CNMBR", ""))
 
-            # Aseguramos que todos los municipios del mapa existan en los datos (con 0 si no hay)
+            # Aseguramos coincidencia perfecta eliminando espacios extra en el cruce
             df_base = pd.DataFrame({"ID_MPIO": all_ids})
             map_data_full = df_base.merge(counts, on='ID_MPIO', how='left').fillna(0)
             
