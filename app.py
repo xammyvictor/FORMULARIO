@@ -6,13 +6,16 @@ import time
 import qrcode
 from io import BytesIO
 import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
 
 # --- CONFIGURACIÓN GENERAL ---
 BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
+META_REGISTROS = 12000
 
 st.set_page_config(
-    page_title="Sistema Maria Irma - Gestión Ciudadana",
-    page_icon="🗳️",
+    page_title="Dashboard Maria Irma - Gestión Ciudadana",
+    page_icon="📊",
     layout="wide"
 )
 
@@ -20,13 +23,11 @@ st.set_page_config(
 st.markdown("""
     <style>
     .stApp { background-color: #FFFFFF !important; color: #333333 !important; }
-    header, [data-testid="stHeader"] { background-color: #FFFFFF !important; }
     h1, h2, h3 { color: #D81B60 !important; text-align: center; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
-    .stButton>button { width: 100%; background-color: #E91E63 !important; color: white !important; border-radius: 8px; font-weight: bold; height: 3em; }
-    .stButton>button:hover { background-color: #C2185B !important; border-color: #C2185B !important; }
+    .stMetric { background-color: #FCE4EC; padding: 15px; border-radius: 10px; border: 1px solid #F8BBD0; }
+    .leader-card { padding: 10px; border-radius: 5px; background-color: #F8F9FA; margin-bottom: 5px; border-left: 5px solid #E91E63; }
     [data-testid="stSidebar"] { background-color: #FCE4EC !important; }
-    .guest-banner { padding: 15px; background-color: #F8BBD0; color: #880E4F !important; border-radius: 8px; text-align: center; border: 1px solid #F48FB1; margin-bottom: 20px;}
-    label { color: #333333 !important; font-weight: 500; }
+    .stProgress > div > div > div > div { background-color: #E91E63 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -36,7 +37,7 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapi
 def get_google_sheet_client():
     try:
         if "gcp_service_account" not in st.secrets:
-            st.error("Error: Credenciales 'gcp_service_account' no encontradas.")
+            st.error("Error: Credenciales no encontradas.")
             return None
         creds_dict = st.secrets["gcp_service_account"]
         credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
@@ -54,6 +55,8 @@ def get_all_data(file_name="Base_Datos_Ciudadanos"):
         df = pd.DataFrame(data)
         if not df.empty:
             df.columns = [str(c).strip() for c in df.columns]
+            # Convertir fecha a datetime
+            df['Fecha Registro'] = pd.to_datetime(df['Fecha Registro'], errors='coerce')
         return df
     except Exception:
         return pd.DataFrame()
@@ -62,234 +65,198 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
     client = get_google_sheet_client()
     if not client: return False
     try:
-        try:
-            sh = client.open(file_name)
-            worksheet = sh.sheet1
-        except gspread.SpreadsheetNotFound:
-            sh = client.create(file_name)
-            if "admin_email" in st.secrets:
-                sh.share(st.secrets["admin_email"], perm_type='user', role='writer')
-            worksheet = sh.sheet1
-            headers = ["Fecha Registro", "Registrado Por", "Nombre", "Cédula", "Teléfono", "Ocupación", "Dirección", "Barrio", "Ciudad", "Puesto votacion"]
-            worksheet.append_row(headers)
-
+        sh = client.open(file_name)
+        worksheet = sh.sheet1
         timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
         usuario_actual = st.session_state.get("user_name", "Desconocido")
-        
-        row = [
-            timestamp, 
-            usuario_actual, 
-            data_dict["nombre"], 
-            data_dict["cedula"], 
-            data_dict["telefono"],
-            data_dict["ocupacion"], 
-            data_dict["direccion"], 
-            data_dict["barrio"], 
-            data_dict["ciudad"],
-            data_dict.get("puesto", "")
-        ]
+        row = [timestamp, usuario_actual, data_dict["nombre"], data_dict["cedula"], 
+               data_dict["telefono"], data_dict["ocupacion"], data_dict["direccion"], 
+               data_dict["barrio"], data_dict["ciudad"], data_dict.get("puesto", "")]
         worksheet.append_row(row)
         return True
     except Exception as e:
-        st.error(f"Error al guardar en la base de datos: {e}")
+        st.error(f"Error al guardar: {e}")
         return False
 
 # --- LÓGICA DE SESIÓN ---
 def check_session():
-    if "query_params_checked" not in st.session_state:
-        try:
-            params = st.query_params
-            if "ref" in params:
-                ref_user = params["ref"]
-                st.session_state.logged_in = True
-                st.session_state.user_name = ref_user
-                st.session_state.is_guest = True
-        except: pass
-        st.session_state.query_params_checked = True
-
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
-        st.session_state.is_guest = False
+    
+    # Manejo de referido por URL
+    try:
+        params = st.query_params
+        if "ref" in params and "query_checked" not in st.session_state:
+            st.session_state.logged_in = True
+            st.session_state.user_name = params["ref"]
+            st.session_state.is_guest = True
+            st.session_state.query_checked = True
+    except: pass
 
     if not st.session_state.logged_in:
         st.title("🔐 Acceso al Sistema")
-        with st.form("login_form"):
-            user = st.text_input("Usuario").lower().strip()
-            password = st.text_input("Contraseña", type="password")
-            if st.form_submit_button("Ingresar"):
-                credenciales = {"fabian": "1234", "xammy": "1234", "brayan": "1234", "diegomonta": "1234"}
-                if user in credenciales and credenciales[user] == password:
+        with st.form("login"):
+            u = st.text_input("Usuario").lower().strip()
+            p = st.text_input("Contraseña", type="password")
+            if st.form_submit_button("Entrar"):
+                creds = {"fabian": "1234", "xammy": "1234", "brayan": "1234", "diegomonta": "1234"}
+                if u in creds and creds[u] == p:
                     st.session_state.logged_in = True
-                    st.session_state.user_name = user
+                    st.session_state.user_name = u
                     st.session_state.is_guest = False
                     st.rerun()
-                else: st.error("❌ Credenciales incorrectas")
+                else: st.error("Error de acceso")
         return False
     return True
 
-# --- INICIALIZACIÓN DE ESTADO ---
 if "form_reset_key" not in st.session_state:
     st.session_state.form_reset_key = 0
 
-# --- FLUJO PRINCIPAL ---
+# --- APP PRINCIPAL ---
 if check_session():
     usuario = st.session_state.user_name
-    
-    st.sidebar.markdown(f"### 👤 Usuario: **{usuario.capitalize()}**")
-    
-    USUARIOS_CON_ACCESO_TOTAL = ["fabian", "xammy", "brayan"]
-    es_admin = usuario.lower() in USUARIOS_CON_ACCESO_TOTAL and not st.session_state.get("is_guest", False)
+    USUARIOS_ADMIN = ["fabian", "xammy", "brayan"]
+    es_admin = usuario.lower() in USUARIOS_ADMIN and not st.session_state.get("is_guest", False)
 
-    if es_admin:
-        opciones_menu = ["📝 Registro Nuevo", "🔍 Búsqueda Rápida", "📊 Estadísticas"]
-    else:
-        opciones_menu = ["📝 Registro Nuevo"]
-        if not st.session_state.get("is_guest", False):
-            st.sidebar.warning("Acceso limitado: Registro habilitado.")
+    st.sidebar.title(f"👤 {usuario.capitalize()}")
+    opciones = ["📝 Registro", "🔍 Búsqueda", "📊 Estadísticas"] if es_admin else ["📝 Registro"]
+    opcion = st.sidebar.radio("Menú", opciones)
 
-    opcion = st.sidebar.radio("Navegación:", opciones_menu)
-    
-    if not st.session_state.get("is_guest", False):
-        with st.sidebar.expander("📱 Generar QR", expanded=False):
-            st.write("QR para que otros se registren bajo tu nombre:")
-            url_input = st.text_input("URL Base:", value=BASE_URL)
-            if st.button("Generar Código QR"):
-                clean_url = url_input.strip().rstrip("/")
-                link_registro = f"{clean_url}?ref={usuario}"
-                try:
-                    qr = qrcode.QRCode(box_size=10, border=4)
-                    qr.add_data(link_registro)
-                    qr.make(fit=True)
-                    img = qr.make_image(fill_color="#E91E63", back_color="white")
-                    buf = BytesIO()
-                    img.save(buf, format="PNG")
-                    st.image(buf.getvalue(), caption=f"QR de {usuario.capitalize()}", use_column_width=True)
-                    st.success("¡QR listo!")
-                except Exception as e:
-                    st.error(f"Error al generar QR: {e}")
-
-    if st.sidebar.button("Cerrar Sesión"):
+    if st.sidebar.button("Salir"):
         st.session_state.clear()
         st.rerun()
 
-    # --- SECCIÓN 1: REGISTRO ---
-    if opcion == "📝 Registro Nuevo":
-        st.title("🗳️ Nuevo Registro de Ciudadano")
-        if st.session_state.get("is_guest"):
-            st.markdown(f'<div class="guest-banner">👋 <b>Modo Invitado:</b> Estás registrando datos para: <b>{usuario.capitalize()}</b></div>', unsafe_allow_html=True)
-
-        # Usamos una "key" dinámica para el formulario. Cuando cambia, el formulario se limpia.
-        with st.form(key=f"registro_form_{st.session_state.form_reset_key}", clear_on_submit=False):
-            st.subheader("Información Personal")
-            col1, col2 = st.columns(2)
-            with col1:
-                in_nombre = st.text_input("Nombre Completo")
-                in_cedula = st.text_input("Número de Cédula")
-                in_telefono = st.text_input("Número de Teléfono")
-            with col2:
-                in_ocupacion = st.text_input("Ocupación")
-                in_direccion = st.text_input("Dirección")
-                in_barrio = st.text_input("Barrio")
-            
-            c_map1, c_map2 = st.columns(2)
-            in_ciudad = c_map1.text_input("Ciudad", value="BUGA")
-            in_puesto = c_map2.text_input("Puesto de Votación (Opcional)")
-            
-            st.markdown("---")
-            enviar = st.form_submit_button("✅ Guardar Registro")
-
-            if enviar:
-                errores = []
-                if not all([in_nombre.strip(), in_cedula.strip(), in_telefono.strip(), in_ocupacion.strip(), 
-                            in_direccion.strip(), in_barrio.strip(), in_ciudad.strip()]):
-                    errores.append("⚠️ Todos los campos (excepto Puesto) son obligatorios.")
-                
-                if in_cedula.strip() and not in_cedula.strip().isdigit():
-                    errores.append("❌ La Cédula debe contener solo números.")
-                
-                if in_telefono.strip() and not in_telefono.strip().isdigit():
-                    errores.append("❌ El Teléfono debe contener solo números.")
-
-                if errores:
-                    for error in errores: st.error(error)
-                else:
-                    data = {
-                        "nombre": in_nombre.strip().upper(), "cedula": in_cedula.strip(),
-                        "telefono": in_telefono.strip(), "ocupacion": in_ocupacion.strip().upper(),
-                        "direccion": in_direccion.strip().upper(), "barrio": in_barrio.strip().upper(),
-                        "ciudad": in_ciudad.strip().upper(), "puesto": in_puesto.strip().upper()
-                    }
-                    
-                    with st.spinner("Guardando en la base de datos..."):
-                        if save_to_drive(data):
-                            # ÉXITO: Mostramos mensaje y incrementamos la llave para limpiar
-                            st.success(f"✅ ¡Registro de {in_nombre.upper()} guardado!")
-                            
-                            # Incrementamos el contador de la llave para "destruir" el formulario viejo y crear uno nuevo vacío
-                            st.session_state.form_reset_key += 1
-                            
-                            time.sleep(2)
-                            st.rerun()
-                        else:
-                            st.error("No se pudo guardar el registro. Intente de nuevo.")
-
-    # --- SECCIÓN 2: BÚSQUEDA ---
-    elif opcion == "🔍 Búsqueda Rápida" and es_admin:
-        st.title("🔍 Consulta de Base de Datos")
-        df = get_all_data()
-        if not df.empty:
-            busqueda = st.text_input("Buscar por Nombre o Cédula:").upper()
-            if busqueda:
-                mask = df.astype(str).apply(lambda row: row.str.contains(busqueda, case=False).any(), axis=1)
-                st.dataframe(df[mask], use_container_width=True)
-            else:
-                st.info("Mostrando registros recientes:")
-                st.dataframe(df.tail(15), use_container_width=True)
-        else: st.warning("Base de datos vacía o no conectada.")
-
-    # --- SECCIÓN 3: ESTADÍSTICAS ---
-    elif opcion == "📊 Estadísticas" and es_admin:
-        st.title("📊 Análisis de Gestión")
-        df = get_all_data()
-        if not df.empty:
-            col_nombre = df.columns[2] if len(df.columns) > 2 else "Nombre"
-            col_lider = df.columns[1] if len(df.columns) > 1 else "Registrador Por"
-            col_ciudad = "Ciudad" if "Ciudad" in df.columns else df.columns[-2]
-
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Total Registrados", len(df))
-            m2.metric("Ciudades", df[col_ciudad].nunique() if col_ciudad in df.columns else 0)
-            m3.metric("Último Registro", str(df.iloc[-1][col_nombre])[:20])
-
+    # --- MÓDULO DE REGISTRO ---
+    if opcion == "📝 Registro":
+        st.title("🗳️ Registro de Ciudadano")
+        with st.form(key=f"reg_{st.session_state.form_reset_key}"):
             c1, c2 = st.columns(2)
             with c1:
-                st.subheader("Concentración por Ciudad")
-                if col_ciudad in df.columns:
-                    st.plotly_chart(px.pie(df, names=col_ciudad, color_discrete_sequence=px.colors.sequential.RdPu), use_container_width=True)
+                nom = st.text_input("Nombre Completo")
+                ced = st.text_input("Cédula")
+                tel = st.text_input("Teléfono")
             with c2:
-                st.subheader("Registros por Líder")
-                if col_lider in df.columns:
-                    counts = df[col_lider].value_counts().reset_index()
-                    counts.columns = ['Líder', 'Registros']
-                    st.plotly_chart(px.bar(counts, x='Líder', y='Registros', color_discrete_sequence=['#D81B60']), use_container_width=True)
+                ocu = st.text_input("Ocupación")
+                dir = st.text_input("Dirección")
+                bar = st.text_input("Barrio")
+            ciu = st.text_input("Municipio", value="BUGA")
+            pue = st.text_input("Puesto (Opcional)")
+            
+            if st.form_submit_button("✅ Guardar"):
+                if all([nom, ced, tel, ciu]):
+                    data = {"nombre": nom.upper(), "cedula": ced, "telefono": tel, 
+                            "ocupacion": ocu.upper(), "direccion": dir.upper(), 
+                            "barrio": bar.upper(), "ciudad": ciu.upper(), "puesto": pue.upper()}
+                    if save_to_drive(data):
+                        st.success("Guardado correctamente")
+                        st.session_state.form_reset_key += 1
+                        time.sleep(1)
+                        st.rerun()
+                else: st.warning("Complete los campos obligatorios")
+
+    # --- MÓDULO DE ESTADÍSTICAS ---
+    elif opcion == "📊 Estadísticas":
+        st.title("📊 Panel de Control y Metas")
+        df = get_all_data()
+        
+        if not df.empty:
+            # 1. BARRA DE PROGRESO Y METRICAS TEMPORALES
+            total_actual = len(df)
+            porcentaje = min(total_actual / META_REGISTROS, 1.0)
+            
+            st.subheader(f"Progreso hacia la Meta: {total_actual:,} / {META_REGISTROS:,}")
+            st.progress(porcentaje)
+            
+            # Cálculos de tiempo
+            hoy = datetime.now()
+            df['Fecha'] = df['Fecha Registro'].dt.date
+            reg_hoy = len(df[df['Fecha'] == hoy.date()])
+            reg_8d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=8))])
+            reg_15d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=15))])
+            reg_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
+
+            col_t1, col_t2, col_t3, col_t4 = st.columns(4)
+            col_t1.metric("Hoy", f"{reg_hoy}")
+            col_t2.metric("Últimos 8 días", f"{reg_8d}")
+            col_t3.metric("Últimos 15 días", f"{reg_15d}")
+            col_t4.metric("Últimos 30 días", f"{reg_30d}")
 
             st.markdown("---")
-            st.subheader("📍 Mapa de Registros")
-            coords = {
-                'BUGA': [3.9009, -76.3008], 'CALI': [3.4516, -76.5320], 'BOGOTA': [4.7110, -74.0721],
-                'MEDELLIN': [6.2442, -75.5812], 'PALMIRA': [3.5394, -76.3036], 'TULUA': [4.0847, -76.1954],
-                'CARTAGO': [4.7464, -75.9117], 'YUMBO': [3.5411, -76.4911], 'JAMUNDI': [3.2612, -76.5350],
-                'SAN PEDRO': [3.9936, -76.2281], 'GUACARI': [3.7633, -76.3325], 'DARIEN': [3.9314, -76.5186]
-            }
 
-            if col_ciudad in df.columns:
-                map_data = df[col_ciudad].str.strip().str.upper().value_counts().reset_index()
-                map_data.columns = ['Ciudad', 'Cantidad']
-                map_data['lat'] = map_data['Ciudad'].apply(lambda x: coords.get(x, [3.9, -76.3])[0])
-                map_data['lon'] = map_data['Ciudad'].apply(lambda x: coords.get(x, [3.9, -76.3])[1])
-                fig_map = px.scatter_mapbox(map_data, lat="lat", lon="lon", size="Cantidad", color="Cantidad",
-                                          color_continuous_scale="RdPu", size_max=40, zoom=7,
-                                          mapbox_style="carto-positron", hover_name="Ciudad")
-                fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-                st.plotly_chart(fig_map, use_container_width=True)
-        else: st.info("Sin registros para analizar.")
+            # 2. RANKING DE LÍDERES E INTERACTIVIDAD
+            col_rank, col_map = st.columns([1, 1])
+            
+            with col_rank:
+                st.subheader("🏆 Ranking de Líderes")
+                lideres_count = df['Registrado Por'].value_counts().reset_index()
+                lideres_count.columns = ['Líder', 'Registros']
+                
+                # Líderes activos
+                lideres_activos = df['Registrado Por'].unique()
+                st.info(f"Líderes con actividad: {len(lideres_activos)}")
+
+                # Selección de líder para ver detalles
+                seleccionado = st.selectbox("Seleccione un líder para ver sus registros:", 
+                                            ["Todos"] + list(lideres_count['Líder']))
+                
+                if seleccionado == "Todos":
+                    st.dataframe(lideres_count, use_container_width=True, hide_index=True)
+                else:
+                    detalles_lider = df[df['Registrado Por'] == seleccionado][['Fecha Registro', 'Nombre', 'Cédula', 'Ciudad']]
+                    st.write(f"Registros de **{seleccionado.capitalize()}**:")
+                    st.dataframe(detalles_lider, use_container_width=True, hide_index=True)
+
+            with col_map:
+                # 3. MAPA DE CALOR VALLE DEL CAUCA (Municipio)
+                st.subheader("📍 Mapa de Calor - Valle del Cauca")
+                
+                # Agrupar por municipio
+                municipios_df = df['Ciudad'].str.strip().str.upper().value_counts().reset_index()
+                municipios_df.columns = ['Municipio', 'Cantidad']
+                
+                # Nota: Para un mapa "dibujado" real sin Google Maps usamos px.choropleth
+                # Se requiere un archivo GeoJSON de municipios de Colombia. 
+                # Usaremos uno simplificado de una URL pública para el Valle.
+                try:
+                    geojson_url = "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json"
+                    
+                    fig_mapa = px.choropleth(
+                        municipios_df,
+                        geojson=geojson_url,
+                        locations='Municipio',
+                        featureidkey="properties.name", # Depende del GeoJSON
+                        color='Cantidad',
+                        color_continuous_scale="RdPu",
+                        scope="south america",
+                        labels={'Cantidad':'Registros'}
+                    )
+                    fig_mapa.update_geos(fitbounds="locations", visible=False)
+                    fig_mapa.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=400)
+                    st.plotly_chart(fig_mapa, use_container_width=True)
+                except:
+                    # Fallback si el GeoJSON falla: Gráfico de burbujas/barras representativo
+                    st.write("Cargando mapa... (Visualización Alternativa)")
+                    st.plotly_chart(px.bar(municipios_df, x='Municipio', y='Cantidad', color='Cantidad', color_continuous_scale="RdPu"), use_container_width=True)
+
+            # 4. LISTADO DE LÍDERES ACTIVOS
+            st.markdown("---")
+            st.subheader("👥 Líderes que tuvieron actividad")
+            cols_lideres = st.columns(4)
+            for i, l in enumerate(sorted(lideres_activos)):
+                with cols_lideres[i % 4]:
+                    st.markdown(f'<div class="leader-card"><b>{l.upper()}</b></div>', unsafe_allow_html=True)
+
+        else:
+            st.warning("No hay datos para mostrar estadísticas.")
+
+    # --- MÓDULO DE BÚSQUEDA ---
+    elif opcion == "🔍 Búsqueda" and es_admin:
+        st.title("🔍 Búsqueda de Ciudadanos")
+        df = get_all_data()
+        if not df.empty:
+            busq = st.text_input("Nombre o Cédula").upper()
+            if busq:
+                res = df[df.astype(str).apply(lambda x: busq in x.values, axis=1)]
+                st.dataframe(res, use_container_width=True)
+            else:
+                st.dataframe(df.tail(20), use_container_width=True)
