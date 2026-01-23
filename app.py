@@ -17,7 +17,7 @@ BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
 META_REGISTROS = 12000
 
 st.set_page_config(
-    page_title="Maria Irma | Pulse Analytics",
+    page_title="Maria Irma | Analytics Coropletas",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -77,11 +77,7 @@ st.markdown("""
         transition: width 1.5s ease;
     }
 
-    /* Botones y Formulario */
-    .stButton>button { border-radius: 14px !important; background: var(--pulse-pink) !important; font-weight: 700 !important; color: white !important; border: none !important; width: 100%; height: 3.5rem; }
-    .stTextInput>div>div>input { border-radius: 12px !important; }
-    
-    /* Hotspot Tag */
+    /* Estilo de Ranking */
     .hotspot-tag {
         padding: 4px 12px;
         background: #FCE4EC;
@@ -130,9 +126,10 @@ def save_data(data_dict):
         return True
     except: return False
 
-# --- NORMALIZACIÓN DE MUNICIPIOS ---
+# --- NORMALIZACIÓN DE MUNICIPIOS (LLAVE PARA EL MAPA DE COROPLETAS) ---
 def normalizar_muni(muni):
     m = str(muni).upper().strip()
+    # Mapeo para que coincida EXACTAMENTE con los nombres en el archivo GeoJSON (el dibujo)
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
@@ -153,35 +150,14 @@ def normalizar_muni(muni):
         "GINEBRA": "GINEBRA",
         "LA UNION": "LA UNIÓN",
         "SEVILLA": "SEVILLA",
-        "CAICEDONIA": "CAICEDONIA",
-        "ANSERMANUEVO": "ANSERMANUEVO",
-        "BOLIVAR": "BOLÍVAR",
-        "BUENAVENTURA": "BUENAVENTURA",
-        "BUGALAGRANDE": "BUGALAGRANDE",
-        "CANDELARIA": "CANDELARIA",
-        "DAGUA": "DAGUA",
-        "EL AGUILA": "EL ÁGUILA",
-        "EL CAIRO": "EL CAIRO",
-        "EL DOVIO": "EL DOVIO",
-        "LA CUMBRE": "LA CUMBRE",
-        "LA VICTORIA": "LA VICTORIA",
-        "OBANDO": "OBANDO",
-        "RESTREPO": "RESTREPO",
-        "RIOFRIO": "RIOFRIO",
-        "SAN PEDRO": "SAN PEDRO",
-        "TORO": "TORO",
-        "TRUJILLO": "TRUJILLO",
-        "ULLOA": "ULLOA",
-        "VERSALLES": "VERSALLES",
-        "VIJES": "VIJES",
-        "YOTOCO": "YOTOCO"
+        "CAICEDONIA": "CAICEDONIA"
     }
     return mapping.get(m, m)
 
-# --- CARGA DEL DIBUJO DEL MAPA ---
+# --- CARGA DEL GEOJSON (EL DIBUJO) ---
 @st.cache_data(ttl=3600)
 def load_valle_geojson():
-    # Usamos jsDelivr como fuente primaria para evitar bloqueos
+    # Fuente de alta disponibilidad para el dibujo de municipios del Valle del Cauca
     url = "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json"
     try:
         r = requests.get(url, timeout=10, verify=False)
@@ -235,7 +211,7 @@ if check_auth():
     # --- REGISTRO ---
     if opcion == "📝 Registro":
         st.title("🗳️ Nuevo Registro")
-        with st.form(key=f"form_pulse_{st.session_state.f_reset}", clear_on_submit=False):
+        with st.form(key=f"form_pulse_{st.session_state.f_reset}"):
             c1, c2 = st.columns(2)
             with c1:
                 nom = st.text_input("Nombre Completo")
@@ -261,9 +237,9 @@ if check_auth():
     elif opcion == "📊 Estadísticas":
         df = get_data()
         if not df.empty:
-            st.title("Pulse Analytics | Panel de Gestión")
+            st.title("Pulse Analytics | Mapa de Gestión Territorial")
             
-            # 1. META HERO
+            # 1. PROGRESO META
             total = len(df)
             perc = min((total / META_REGISTROS) * 100, 100)
             st.markdown(f"""
@@ -278,7 +254,7 @@ if check_auth():
                             <p style="margin:0; opacity:0.6; font-size:0.8rem;">Meta: {META_REGISTROS:,}</p>
                         </div>
                     </div>
-                    <div class="progress-track"><div class="progress-fill" style="width: {perc}%;"></div></div>
+                    <div class="pulse-progress-track"><div class="progress-fill" style="width: {perc}%;"></div></div>
                 </div>
             """, unsafe_allow_html=True)
 
@@ -293,31 +269,31 @@ if check_auth():
             for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
                 col.markdown(f"""<div class="pulse-card"><div class="pulse-label">{lab}</div><div class="pulse-value">{val:,}</div></div>""", unsafe_allow_html=True)
 
-            # 3. MAPA Y LEADERBOARD
+            # 3. MAPA DE COROPLETAS (DIBUJO VECTORIAL)
             st.markdown("<br>", unsafe_allow_html=True)
             c_map, c_rank = st.columns([1.6, 1])
             
             with c_map:
-                st.subheader("📍 Mapa Territorial del Valle")
+                st.subheader("🗺️ Mapa de Coropletas - Valle del Cauca")
                 m_df = df.copy()
-                m_df['M_Map'] = m_df['Ciudad'].apply(normalizar_muni)
-                map_data = m_df['M_Map'].value_counts().reset_index()
+                m_df['Municipio_Map'] = m_df['Ciudad'].apply(normalizar_muni)
+                map_data = m_df['Municipio_Map'].value_counts().reset_index()
                 map_data.columns = ['Municipio', 'Registros']
                 
                 geojson = load_valle_geojson()
                 if geojson:
-                    # MAPA COROPLÉTICO (EL DIBUJO REAL)
+                    # Creamos el mapa de coropletas
                     fig = px.choropleth(
                         map_data, 
                         geojson=geojson, 
                         locations='Municipio',
-                        featureidkey="properties.name", 
+                        featureidkey="properties.name", # Llave de unión entre datos y dibujo
                         color='Registros',
                         color_continuous_scale="Reds", 
                         template="plotly_white",
                         hover_name="Municipio"
                     )
-                    # Forzamos visualización solo del dibujo (sin fondo de mapa mundial)
+                    # Configuramos para ver SOLO el dibujo (sin mapa mundial de fondo)
                     fig.update_geos(
                         fitbounds="locations", 
                         visible=False,
@@ -325,34 +301,15 @@ if check_auth():
                     )
                     fig.update_layout(
                         margin={"r":0,"t":0,"l":0,"b":0}, 
-                        height=550, 
+                        height=600, 
                         coloraxis_showscale=True,
                         paper_bgcolor='rgba(0,0,0,0)',
                         plot_bgcolor='rgba(0,0,0,0)'
                     )
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 else:
-                    # SI FALLA EL SERVIDOR: MOSTRAR MAPA DE PUNTOS SOBRE EL TERRITORIO
-                    st.error("Utilizando dibujo simplificado por restricciones de red.")
-                    # Coordenadas centroide aproximadas de los municipios principales para que no se vea todo en el mismo lugar
-                    coords_valle = {
-                        'GUADALAJARA DE BUGA': [3.9009, -76.3008],
-                        'SANTIAGO DE CALI': [3.4516, -76.5320],
-                        'PALMIRA': [3.5394, -76.3036],
-                        'TULUÁ': [4.0847, -76.1954],
-                        'JAMUNDÍ': [3.2612, -76.5350],
-                        'CARTAGO': [4.7464, -75.9117]
-                    }
-                    map_data['lat'] = map_data['Municipio'].apply(lambda x: coords_valle.get(x, [3.9, -76.3])[0])
-                    map_data['lon'] = map_data['Municipio'].apply(lambda x: coords_valle.get(x, [3.9, -76.3])[1])
-                    
-                    fig = px.scatter_geo(
-                        map_data, lat="lat", lon="lon", size="Registros", color="Registros",
-                        color_continuous_scale="Reds", hover_name="Municipio",
-                        scope="south america"
-                    )
-                    fig.update_geos(fitbounds="locations", visible=False)
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.error("Error al cargar el dibujo territorial. Mostrando tabla de apoyo:")
+                    st.dataframe(map_data, use_container_width=True)
 
             with c_rank:
                 st.subheader("🏆 TOP Líderes")
@@ -367,7 +324,7 @@ if check_auth():
                     """, unsafe_allow_html=True)
                 
                 st.markdown("<br>", unsafe_allow_html=True)
-                sel_lider = st.selectbox("Explorar líder:", ["-- Seleccionar --"] + list(ranking['Líder']))
+                sel_lider = st.selectbox("Detalle por Líder:", ["-- Seleccionar --"] + list(ranking['Líder']))
                 if sel_lider != "-- Seleccionar --":
                     st.dataframe(df[df['Registrado Por'] == sel_lider][['Nombre', 'Ciudad']].tail(10), use_container_width=True, hide_index=True)
 
@@ -380,7 +337,7 @@ if check_auth():
             st.plotly_chart(fig_t, use_container_width=True)
 
     elif opcion == "🔍 Búsqueda":
-        st.title("🔍 Buscador de Registros")
+        st.title("🔍 Explorador Pulse")
         df = get_data()
         if not df.empty:
             q = st.text_input("Buscar por Nombre, Cédula o Ciudad").upper()
