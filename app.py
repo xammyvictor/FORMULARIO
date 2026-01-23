@@ -14,63 +14,66 @@ BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
 META_REGISTROS = 12000
 
 st.set_page_config(
-    page_title="Maria Irma | Analytics",
+    page_title="Maria Irma | Analytics Pulse",
     page_icon="📈",
     layout="wide"
 )
 
-# --- ESTILOS VISUALES (Leader Pulse Style) ---
+# --- ESTILOS VISUALES (Pulse Premium Style) ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
     
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-    }
+    * { font-family: 'Plus Jakarta Sans', sans-serif; }
     
     .stApp { background-color: #F8FAFC; }
     
-    /* Tarjetas de Métricas */
-    .metric-card {
-        background-color: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-        border: 1px solid #E2E8F0;
-        text-align: center;
-    }
-    .metric-title { color: #64748B; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; margin-bottom: 8px; }
-    .metric-value { color: #1E293B; font-size: 1.5rem; font-weight: 700; }
-    
-    /* Barra de Progreso */
-    .progress-container {
-        background-color: #E2E8F0;
+    /* Contenedores de Tarjetas KPI */
+    .pulse-card {
+        background: white;
+        padding: 24px;
         border-radius: 20px;
-        height: 12px;
-        width: 100%;
-        margin: 10px 0;
-    }
-    .progress-bar {
-        background: linear-gradient(90deg, #E91E63 0%, #C2185B 100%);
-        height: 12px;
-        border-radius: 20px;
+        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.02);
+        border: 1px solid #F1F5F9;
+        margin-bottom: 20px;
     }
     
-    /* Leader Cards */
-    .leader-tag {
-        background-color: #FCE4EC;
-        color: #C2185B;
-        padding: 6px 12px;
-        border-radius: 20px;
-        font-weight: 600;
-        font-size: 0.8rem;
-        display: inline-block;
-        margin: 4px;
-        border: 1px solid #F8BBD0;
+    .pulse-label { color: #64748B; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+    .pulse-value { color: #0F172A; font-size: 1.75rem; font-weight: 800; line-height: 1; }
+    .pulse-trend { font-size: 0.8rem; font-weight: 600; margin-top: 10px; display: flex; align-items: center; }
+    .trend-up { color: #10B981; }
+    
+    /* Barra de Meta */
+    .goal-box {
+        background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+        color: white;
+        padding: 30px;
+        border-radius: 24px;
+        margin-bottom: 30px;
+        position: relative;
+        overflow: hidden;
     }
+    
+    .goal-progress-bg { background: rgba(255,255,255,0.1); border-radius: 10px; height: 14px; width: 100%; margin: 15px 0; }
+    .goal-progress-fill { 
+        background: linear-gradient(90deg, #E91E63 0%, #FF4081 100%); 
+        height: 14px; border-radius: 10px; transition: width 1s ease-in-out; 
+    }
+    
+    /* Ranking Table Custom */
+    .leader-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        border-bottom: 1px solid #F1F5F9;
+    }
+    .leader-name { font-weight: 600; color: #334155; }
+    .leader-count { background: #FCE4EC; color: #E91E63; padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 0.85rem; }
 
-    h1, h2, h3 { color: #0F172A !important; font-weight: 700 !important; }
-    .stSidebar { background-color: #FFFFFF !important; border-right: 1px solid #E2E8F0; }
+    /* Ajustes Streamlit */
+    [data-testid="stMetricValue"] { font-size: 1.8rem !important; font-weight: 800 !important; }
+    .stSidebar { background-color: #FFFFFF !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -79,8 +82,7 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapi
 
 def get_google_sheet_client():
     try:
-        if "gcp_service_account" not in st.secrets:
-            return None
+        if "gcp_service_account" not in st.secrets: return None
         creds_dict = st.secrets["gcp_service_account"]
         credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
         return gspread.authorize(credentials)
@@ -118,7 +120,6 @@ def check_session():
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
     
-    # Referido por URL
     try:
         params = st.query_params
         if "ref" in params and "query_checked" not in st.session_state:
@@ -129,18 +130,18 @@ def check_session():
     except: pass
 
     if not st.session_state.logged_in:
-        st.title("🔐 Acceso Analytics")
+        st.markdown("<h1 style='text-align:center;'>Pulse Login</h1>", unsafe_allow_html=True)
         with st.container():
             u = st.text_input("Usuario")
             p = st.text_input("Contraseña", type="password")
-            if st.button("Iniciar Sesión"):
+            if st.button("Acceder al Dashboard"):
                 creds = {"fabian": "1234", "xammy": "1234", "brayan": "1234", "diegomonta": "1234"}
                 if u.lower() in creds and creds[u.lower()] == p:
                     st.session_state.logged_in = True
                     st.session_state.user_name = u.lower()
                     st.session_state.is_guest = False
                     st.rerun()
-                else: st.error("Acceso Denegado")
+                else: st.error("Credenciales Inválidas")
         return False
     return True
 
@@ -153,161 +154,166 @@ if check_session():
     USUARIOS_ADMIN = ["fabian", "xammy", "brayan"]
     es_admin = usuario.lower() in USUARIOS_ADMIN and not st.session_state.get("is_guest", False)
 
-    # Sidebar Moderno
-    st.sidebar.markdown(f"### ⚡ **{usuario.capitalize()}**")
+    st.sidebar.markdown(f"<div style='padding: 10px; border-radius: 12px; background: #FCE4EC; color: #E91E63; font-weight: 800; text-align: center;'>{usuario.upper()}</div>", unsafe_allow_html=True)
     st.sidebar.markdown("---")
-    opcion = st.sidebar.radio("Navegación", ["📝 Registro", "🔍 Búsqueda", "📊 Estadísticas"] if es_admin else ["📝 Registro"])
+    opcion = st.sidebar.radio("MENÚ PULSE", ["📝 Registro", "🔍 Búsqueda", "📊 Estadísticas"] if es_admin else ["📝 Registro"])
     
     if st.sidebar.button("Cerrar Sesión"):
         st.session_state.clear()
         st.rerun()
 
     if opcion == "📝 Registro":
-        st.title("🗳️ Nuevo Registro")
-        with st.form(key=f"reg_form_{st.session_state.form_reset_key}"):
+        st.title("🗳️ Registro Ciudadano")
+        with st.form(key=f"p_reg_{st.session_state.form_reset_key}"):
             c1, c2 = st.columns(2)
             with c1:
-                nom = st.text_input("Nombre")
-                ced = st.text_input("Cédula")
-                tel = st.text_input("Teléfono")
+                nom = st.text_input("Nombre Completo")
+                ced = st.text_input("Número de Cédula")
+                tel = st.text_input("Teléfono de Contacto")
             with c2:
-                ocu = st.text_input("Ocupación")
-                dire = st.text_input("Dirección")
+                ocu = st.text_input("Ocupación / Oficio")
+                dire = st.text_input("Dirección de Residencia")
                 barr = st.text_input("Barrio")
-            ciu = st.text_input("Ciudad", value="BUGA")
-            pue = st.text_input("Puesto (Opcional)")
+            ciu = st.text_input("Municipio", value="BUGA")
+            pue = st.text_input("Lugar de Votación (Opcional)")
             
-            if st.form_submit_button("✅ Guardar Registro"):
+            if st.form_submit_button("REGISTRAR AHORA"):
                 if nom and ced and tel:
                     if save_to_drive({"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dire.upper(),"barrio":barr.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}):
-                        st.success("¡Registro Exitoso!")
+                        st.success("¡Excelente! Registro capturado.")
                         st.session_state.form_reset_key += 1
-                        time.sleep(1.5)
+                        time.sleep(1)
                         st.rerun()
-                else: st.warning("Nombre, Cédula y Teléfono son obligatorios")
+                else: st.warning("Por favor complete los campos requeridos.")
 
     elif opcion == "📊 Estadísticas":
         df = get_all_data()
         
         if not df.empty:
-            st.title("📊 Análisis de Gestión en Tiempo Real")
+            st.title("Pulse Analytics | Gestión Maria Irma")
             
-            # --- 1. PROGRESO Y KPIs ---
+            # --- 1. SECCIÓN DE META ---
             total_actual = len(df)
-            progreso = min(total_actual / META_REGISTROS, 1.0)
+            porcentaje = (total_actual / META_REGISTROS) * 100
             
             st.markdown(f"""
-                <div style="background-color: white; padding: 25px; border-radius: 15px; border: 1px solid #E2E8F0; margin-bottom: 25px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                        <span style="font-weight: 700; color: #1E293B;">PROGRESO HACIA LA META</span>
-                        <span style="font-weight: 700; color: #E91E63; font-size: 1.2rem;">{total_actual:,} / {META_REGISTROS:,}</span>
+                <div class="goal-box">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                        <div>
+                            <p style="margin: 0; opacity: 0.8; font-size: 0.9rem; font-weight: 600;">ESTADO DE LA META GLOBAL</p>
+                            <h2 style="color: white !important; margin: 5px 0 0 0; font-size: 2.5rem;">{total_actual:,} <span style="font-size: 1rem; opacity: 0.6;">registros</span></h2>
+                        </div>
+                        <div style="text-align: right;">
+                            <h3 style="color: #E91E63 !important; margin: 0; font-size: 1.8rem;">{porcentaje:.1f}%</h3>
+                            <p style="margin: 0; opacity: 0.8; font-size: 0.8rem;">de {META_REGISTROS:,}</p>
+                        </div>
                     </div>
-                    <div class="progress-container">
-                        <div class="progress-bar" style="width: {progreso*100}%;"></div>
+                    <div class="goal-progress-bg">
+                        <div class="goal-progress-fill" style="width: {porcentaje}%;"></div>
                     </div>
-                    <p style="color: #64748B; font-size: 0.85rem; margin-top: 10px;">Equivale al {progreso*100:.1f}% del objetivo general.</p>
                 </div>
             """, unsafe_allow_html=True)
 
-            # Cálculo de tiempos
+            # --- 2. KPIs TEMPORALES ---
             hoy = datetime.now()
             df['Fecha_Solo'] = df['Fecha Registro'].dt.date
-            
             m_hoy = len(df[df['Fecha_Solo'] == hoy.date()])
             m_8d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=8))])
             m_15d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=15))])
             m_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
 
             k1, k2, k3, k4 = st.columns(4)
-            for col, title, val in zip([k1, k2, k3, k4], 
-                                     ["Hoy", "Últimos 8 Días", "Últimos 15 Días", "Últimos 30 Días"],
-                                     [m_hoy, m_8d, m_15d, m_30d]):
+            labels = ["Hoy", "Últimos 8 Días", "Últimos 15 Días", "Últimos 30 Días"]
+            vals = [m_hoy, m_8d, m_15d, m_30d]
+            
+            for col, label, val in zip([k1, k2, k3, k4], labels, vals):
                 col.markdown(f"""
-                    <div class="metric-card">
-                        <div class="metric-title">{title}</div>
-                        <div class="metric-value">{val:,}</div>
+                    <div class="pulse-card">
+                        <div class="pulse-label">{label}</div>
+                        <div class="pulse-value">{val:,}</div>
+                        <div class="pulse-trend trend-up">▲ Actividad positiva</div>
                     </div>
                 """, unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- 2. RANKING Y MAPA ---
-            col_rank, col_mapa = st.columns([1, 1.2])
+            # --- 3. SECCIÓN MIXTA: MAPA Y RANKING ---
+            c_left, c_right = st.columns([1.2, 1])
 
-            with col_rank:
-                st.subheader("🏆 Ranking de Líderes")
+            with c_left:
+                st.subheader("🗺️ Distribución Valle del Cauca")
+                
+                # Mapeo de nombres para asegurar que el GeoJSON funcione
+                normalization = {
+                    "BUGA": "GUADALAJARA DE BUGA",
+                    "CALI": "SANTIAGO DE CALI",
+                    "JAMUNDI": "JAMUNDÍ",
+                    "DARIEN": "CALIMA",
+                    "CALIMA DARIEN": "CALIMA",
+                    "GUACARI": "GUACARÍ",
+                    "TULUA": "TULUÁ"
+                }
+                
+                muni_counts = df['Ciudad'].str.upper().str.strip().replace(normalization).value_counts().reset_index()
+                muni_counts.columns = ['Municipio', 'Registros']
+                
+                try:
+                    geojson_url = "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json"
+                    fig_map = px.choropleth(
+                        muni_counts, geojson=geojson_url, locations='Municipio',
+                        featureidkey="properties.name", color='Registros',
+                        color_continuous_scale="RdPu",
+                        template="plotly_white"
+                    )
+                    fig_map.update_geos(fitbounds="locations", visible=False)
+                    fig_map.update_layout(margin={"r":0,"t":10,"l":0,"b":0}, height=500,
+                                         coloraxis_showscale=False)
+                    st.plotly_chart(fig_map, use_container_width=True, config={'displayModeBar': False})
+                except:
+                    st.error("Error cargando el dibujo del mapa. Verifica conexión.")
+
+            with c_right:
+                st.subheader("🏆 TOP Líderes")
                 rank_df = df['Registrado Por'].value_counts().reset_index()
                 rank_df.columns = ['Líder', 'Registros']
                 
-                # Gráfico de barras moderno
-                fig_rank = px.bar(rank_df.head(10), x='Registros', y='Líder', orientation='h',
-                                 color='Registros', color_continuous_scale='RdPu',
-                                 text_auto=True)
-                fig_rank.update_layout(showlegend=False, plot_bgcolor='rgba(0,0,0,0)', 
-                                      paper_bgcolor='rgba(0,0,0,0)', height=400,
-                                      yaxis={'categoryorder':'total ascending'})
-                st.plotly_chart(fig_rank, use_container_width=True, config={'displayModeBar': False})
-
-                # Selector Interactivo
-                st.markdown("---")
-                lider_sel = st.selectbox("🎯 Filtrar por Líder:", ["Ver Todos"] + list(rank_df['Líder']))
-                if lider_sel != "Ver Todos":
-                    subset = df[df['Registrado Por'] == lider_sel][['Fecha Registro', 'Nombre', 'Ciudad']]
-                    st.write(f"Detalle de **{lider_sel.upper()}**")
-                    st.dataframe(subset, use_container_width=True, hide_index=True)
-
-            with col_mapa:
-                st.subheader("🗺️ Cobertura Valle del Cauca")
-                muni_df = df['Ciudad'].str.upper().value_counts().reset_index()
-                muni_df.columns = ['Municipio', 'Cantidad']
+                # Ranking visual estilo lista
+                for _, row in rank_df.head(8).iterrows():
+                    st.markdown(f"""
+                        <div class="leader-row">
+                            <span class="leader-name">{row['Líder'].upper()}</span>
+                            <span class="leader-count">{row['Registros']} rec.</span>
+                        </div>
+                    """, unsafe_allow_html=True)
                 
-                # Mapa Coroplético "Dibujo" (GeoJSON)
-                try:
-                    geojson_url = "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json"
-                    fig_valle = px.choropleth(
-                        muni_df, geojson=geojson_url, locations='Municipio', 
-                        featureidkey="properties.name", color='Cantidad',
-                        color_continuous_scale="RdPu",
-                        labels={'Cantidad':'Registros'}
-                    )
-                    fig_valle.update_geos(fitbounds="locations", visible=False)
-                    fig_valle.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=500, paper_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_valle, use_container_width=True)
-                except:
-                    st.warning("No se pudo cargar el mapa. Mostrando resumen:")
-                    st.table(muni_df)
+                st.markdown("<br>", unsafe_allow_html=True)
+                # Explorador de líder
+                lider_sel = st.selectbox("Explorar registros de:", ["Seleccionar líder..."] + list(rank_df['Líder']))
+                if lider_sel != "Seleccionar líder...":
+                    sub = df[df['Registrado Por'] == lider_sel][['Fecha Registro', 'Nombre', 'Ciudad']]
+                    st.dataframe(sub, use_container_width=True, hide_index=True)
 
-            # --- 3. LÍDERES ACTIVOS ---
+            # --- 4. TENDENCIA ---
             st.markdown("---")
-            st.subheader("👥 Líderes con Actividad Reciente")
-            activos = sorted(df['Registrado Por'].unique())
-            
-            # Mostrar como etiquetas
-            html_lideres = ""
-            for l in activos:
-                html_lideres += f'<span class="leader-tag">{l.upper()}</span>'
-            st.markdown(f'<div>{html_lideres}</div>', unsafe_allow_html=True)
-            
-            # Tendencia Diaria (Área)
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.subheader("📈 Tendencia de Ingresos")
-            trend = df.groupby('Fecha_Solo').size().reset_index(name='Registros')
-            fig_trend = px.area(trend, x='Fecha_Solo', y='Registros', 
+            st.subheader("📈 Tendencia de Crecimiento")
+            trend_data = df.groupby('Fecha_Solo').size().reset_index(name='Nuevos')
+            fig_trend = px.area(trend_data, x='Fecha_Solo', y='Nuevos', 
                                color_discrete_sequence=['#E91E63'])
+            fig_trend.update_traces(fillcolor="rgba(233, 30, 99, 0.1)")
             fig_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
-                                   xaxis_title=None, yaxis_title="Nuevos Registros")
+                                   xaxis_title=None, yaxis_title=None, height=300)
             st.plotly_chart(fig_trend, use_container_width=True)
 
         else:
-            st.info("No hay datos suficientes para generar estadísticas.")
+            st.info("Iniciando sistema... No hay datos suficientes aún.")
 
     elif opcion == "🔍 Búsqueda":
-        st.title("🔍 Explorador de Datos")
+        st.title("🔍 Explorador de Registros")
         df = get_all_data()
         if not df.empty:
-            q = st.text_input("Buscar por Nombre, Cédula o Líder").upper()
-            if q:
-                res = df[df.astype(str).apply(lambda x: q in x.values, axis=1)]
-                st.dataframe(res, use_container_width=True)
+            search = st.text_input("Ingrese Nombre, Cédula o Líder para filtrar:").upper()
+            if search:
+                filtered = df[df.astype(str).apply(lambda x: search in x.values, axis=1)]
+                st.dataframe(filtered, use_container_width=True)
             else:
-                st.dataframe(df.tail(50), use_container_width=True)
+                st.dataframe(df.tail(100), use_container_width=True)
