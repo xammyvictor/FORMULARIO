@@ -344,6 +344,8 @@ if check_auth():
                             template="plotly_white",
                             labels={'Registros': 'Total Registros'}
                         )
+                        fig.update_geos(fitbounds="locations", visible=False)
+                        st.plotly_chart(fig, use_container_width=True)
                     else:
                         # Mapa de Burbujas / Hotspots sobre el dibujo
                         # Calculamos centroides aproximados o simplemente usamos el dibujo como base
