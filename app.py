@@ -59,12 +59,16 @@ st.markdown("""
 # --- CONEXIÓN GOOGLE SHEETS ---
 @st.cache_resource
 def get_google_sheet_client():
+    if "gcp_service_account" not in st.secrets:
+        st.error("⚠️ Error: No se encontraron las credenciales en st.secrets")
+        return None
     try:
-        if "gcp_service_account" not in st.secrets: return None
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], 
                 scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
         return gspread.authorize(creds)
-    except: return None
+    except Exception as e:
+        st.error(f"⚠️ Error de autenticación: {e}")
+        return None
 
 def get_data():
     client = get_google_sheet_client()
@@ -76,7 +80,9 @@ def get_data():
             df.columns = [c.strip() for c in df.columns]
             df['Fecha Registro'] = pd.to_datetime(df['Fecha Registro'], errors='coerce')
         return df
-    except: return pd.DataFrame()
+    except Exception as e:
+        st.error(f"⚠️ Error al obtener datos: {e}")
+        return pd.DataFrame()
 
 def save_data(data_dict):
     client = get_google_sheet_client()
@@ -101,7 +107,7 @@ def check_auth():
         with col2:
             u = st.text_input("Usuario")
             p = st.text_input("Contraseña", type="password")
-            if st.button("Acceder al Panel"):
+            if st.button("Acceder al Panel", use_container_width=True):
                 creds = {"fabian": "1234", "xammy": "1234", "brayan": "1234", "diegomonta": "1234"}
                 if u.lower() in creds and creds[u.lower()] == p:
                     st.session_state.logged_in = True
@@ -119,16 +125,19 @@ if check_auth():
     USUARIOS_ADMIN = ["fabian", "xammy", "brayan", "diegomonta"]
     es_admin = usuario.lower() in USUARIOS_ADMIN
 
+    # Barra lateral fija
     st.sidebar.markdown(f"<div style='background:#F1F5F9; padding:20px; border-radius:18px; margin-bottom:20px;'><p style='margin:0; font-size:0.75rem; font-weight:700; color:#64748B;'>SESIÓN PULSE</p><p style='margin:0; font-size:1.1rem; font-weight:800; color:#0F172A;'>{usuario.upper()}</p></div>", unsafe_allow_html=True)
+    
+    # Opciones de menú
     opcion = st.sidebar.radio("MENÚ PRINCIPAL", ["📝 Registro", "📊 Estadísticas", "🔍 Búsqueda"] if es_admin else ["📝 Registro"])
     
-    if st.sidebar.button("Salir"):
+    if st.sidebar.button("Cerrar Sesión", use_container_width=True):
         st.session_state.clear()
         st.rerun()
 
     if opcion == "📝 Registro":
         st.title("🗳️ Nuevo Registro")
-        with st.form(key=f"form_pulse_{st.session_state.f_reset}", clear_on_submit=False):
+        with st.form(key=f"form_pulse_{st.session_state.f_reset}"):
             c1, c2 = st.columns(2)
             with c1:
                 nom = st.text_input("Nombre Completo")
@@ -141,20 +150,27 @@ if check_auth():
             ciu = st.text_input("Municipio", value="BUGA")
             pue = st.text_input("Puesto (Opcional)")
             
-            if st.form_submit_button("GUARDAR REGISTRO"):
+            if st.form_submit_button("GUARDAR REGISTRO", use_container_width=True):
                 if nom and ced and tel:
                     if save_data({"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dir.upper(),"barrio":bar.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}):
-                        st.success("¡Registro guardado!")
+                        st.success("¡Registro guardado con éxito!")
                         st.session_state.f_reset += 1
                         time.sleep(1)
                         st.rerun()
-                else: st.warning("Complete Nombre, Cédula y Teléfono")
+                    else:
+                        st.error("No se pudo guardar en Google Sheets. Revisa la conexión.")
+                else: st.warning("Por favor complete Nombre, Cédula y Teléfono.")
 
     elif opcion == "📊 Estadísticas":
         df = get_data()
-        if not df.empty:
+        
+        if df.empty:
+            st.title("📊 Estadísticas")
+            st.info("ℹ️ No hay datos registrados en el Google Sheet o no se pudo conectar. Registra un ciudadano primero.")
+        else:
             st.title("Pulse Analytics | Valle del Cauca")
             
+            # --- 1. HERO META ---
             total = len(df)
             perc = min((total / META_REGISTROS) * 100, 100)
             st.markdown(f"""
@@ -173,7 +189,7 @@ if check_auth():
                 </div>
             """, unsafe_allow_html=True)
 
-            # KPIs
+            # --- 2. KPIs ---
             hoy = datetime.now().date()
             df['F_S'] = df['Fecha Registro'].dt.date
             v_hoy = len(df[df['F_S'] == hoy])
@@ -185,10 +201,9 @@ if check_auth():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- MAPA (REDERIZADO SEGURO) ---
+            # --- 3. MAPA ---
             st.subheader("📍 Concentración Territorial")
             
-            # Procesamos datos para asegurar que no haya nulos y los nombres estén limpios
             m_df = df.copy()
             m_df['Municipio_Map'] = m_df['Ciudad'].astype(str).str.upper().str.strip()
             map_data = m_df['Municipio_Map'].value_counts().reset_index()
@@ -197,61 +212,39 @@ if check_auth():
             c_map_view, c_map_stats = st.columns([2, 1])
             
             with c_map_view:
-                # Intentamos obtener el GeoJSON con un timeout más largo
                 geojson_url = "https://raw.githubusercontent.com/finiterank/mapa-colombia-js/master/colombia-municipios.json"
                 try:
-                    response = requests.get(geojson_url, timeout=15)
-                    response.raise_for_status()
+                    response = requests.get(geojson_url, timeout=10)
                     geojson_data = response.json()
                     
-                    if not map_data.empty:
-                        fig = px.choropleth(
-                            map_data, 
-                            geojson=geojson_data, 
-                            locations='Municipio',
-                            featureidkey="properties.name",
-                            color='Registros',
-                            color_continuous_scale="Reds",
-                            template="plotly_white",
-                            # Usamos el fitbounds solo si hay datos para evitar que el mapa desaparezca
-                            scope="south america" 
-                        )
+                    fig = px.choropleth(
+                        map_data, 
+                        geojson=geojson_data, 
+                        locations='Municipio',
+                        featureidkey="properties.name",
+                        color='Registros',
+                        color_continuous_scale="Reds",
+                        template="plotly_white"
+                    )
 
-                        fig.update_geos(
-                            fitbounds="locations", 
-                            visible=False,
-                            showcountries=False,
-                            showcoastlines=False
-                        )
-                        
-                        fig.update_layout(
-                            margin={"r":0,"t":0,"l":0,"b":0}, 
-                            height=550,
-                            coloraxis_colorbar=dict(title="Cant.", thickness=15)
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.info("No hay datos de municipios para mostrar en el mapa.")
-                        
+                    fig.update_geos(fitbounds="locations", visible=False)
+                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
+                    st.plotly_chart(fig, use_container_width=True)
                 except Exception as e:
-                    # Si falla el dibujo, mostramos el error técnico para diagnosticar
-                    st.error(f"Error al dibujar el mapa: {str(e)}")
-                    st.info("Nota: Verifique que la columna 'Ciudad' contenga nombres exactos como aparecen en el JSON (ej. 'BUGA').")
+                    st.warning(f"No se pudo renderizar el mapa: {e}")
+                    st.info("Asegúrate de tener conexión a internet para cargar el archivo del mapa.")
 
             with c_map_stats:
                 st.write("**🔥 Cobertura por Municipio**")
-                if not map_data.empty:
-                    for _, row in map_data.head(10).iterrows():
-                        st.markdown(f"""
-                            <div class="rank-item">
-                                <span class="rank-name">{row['Municipio']}</span>
-                                <span class="hotspot-pill">{row['Registros']} regs</span>
-                            </div>
-                        """, unsafe_allow_html=True)
-                else:
-                    st.write("Sin datos.")
+                for _, row in map_data.head(10).iterrows():
+                    st.markdown(f"""
+                        <div class="rank-item">
+                            <span class="rank-name">{row['Municipio']}</span>
+                            <span class="hotspot-pill">{row['Registros']} regs</span>
+                        </div>
+                    """, unsafe_allow_html=True)
 
-            # --- RANKING ---
+            # --- 4. RANKING ---
             st.markdown("---")
             c_rank, c_trend = st.columns([1, 1.5])
             with c_rank:
@@ -277,10 +270,12 @@ if check_auth():
                 st.plotly_chart(fig_trend, use_container_width=True)
 
     elif opcion == "🔍 Búsqueda":
-        st.title("🔍 Explorador")
         df = get_data()
-        if not df.empty:
-            q = st.text_input("Buscar...").upper()
+        st.title("🔍 Explorador de Registros")
+        if df.empty:
+            st.info("No hay datos para buscar.")
+        else:
+            q = st.text_input("Buscar por nombre, cédula o municipio...").upper()
             if q:
                 res = df[df.astype(str).apply(lambda x: q in x.values, axis=1)]
                 st.dataframe(res, use_container_width=True)
