@@ -312,6 +312,7 @@ if check_auth():
                 
                 try:
                     geojson_url = "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json"
+
                     response = requests.get(geojson_url)
                     geojson_data = response.json()
                     
