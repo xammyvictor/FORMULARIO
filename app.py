@@ -25,22 +25,24 @@ st.set_page_config(
 def normalizar(texto):
     if not texto: return ""
     texto = str(texto).upper().strip()
+    # Eliminar acentos y diéresis
     texto = unicodedata.normalize("NFD", texto)
     texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
     return texto
 
 def normalizar_para_mapa(muni):
     m = normalizar(muni)
+    # Mapeo de nombres comunes a nombres oficiales del GeoJSON
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
-        "JAMUNDI": "JAMUNDÍ",
-        "TULUA": "TULUÁ",
-        "GUACARI": "GUACARÍ",
+        "JAMUNDI": "JAMUNDI",
+        "TULUA": "TULUA",
+        "GUACARI": "GUACARI",
         "DARIEN": "CALIMA",
-        "LA UNION": "LA UNIÓN",
-        "RIOFRIO": "RIOFRÍO",
-        "ANDALUCIA": "ANDALUCÍA"
+        "LA UNION": "LA UNION",
+        "RIOFRIO": "RIOFRIO",
+        "ANDALUCIA": "ANDALUCIA"
     }
     return mapping.get(m, m)
 
@@ -58,7 +60,6 @@ def apply_custom_styles():
         * { font-family: 'Plus Jakarta Sans', sans-serif; }
         .stApp { background-color: var(--pulse-bg); }
         
-        /* Hero Meta Section */
         .pulse-hero {
             background: var(--pulse-dark);
             color: white;
@@ -85,7 +86,6 @@ def apply_custom_styles():
             border-radius: 20px;
         }
 
-        /* KPI Cards */
         .pulse-kpi-card {
             background: white;
             padding: 24px;
@@ -96,7 +96,6 @@ def apply_custom_styles():
         .kpi-label { color: var(--pulse-slate); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
         .kpi-val { color: var(--pulse-dark); font-size: 2.4rem; font-weight: 800; line-height: 1; }
 
-        /* Ranking Items */
         .rank-item {
             display: flex;
             justify-content: space-between;
@@ -164,25 +163,31 @@ def save_data(data_dict):
 
 @st.cache_data(ttl=3600)
 def get_valle_geojson():
-    """Descarga y filtra el GeoJSON para el Valle del Cauca"""
+    """Descarga y filtra el GeoJSON para el Valle del Cauca de forma robusta"""
     try:
         url = "https://raw.githubusercontent.com/santiblanko/colombia.geojson/master/mpio.json"
         response = requests.get(url, timeout=10)
         data = response.json()
         
-        # Filtrar solo municipios del Valle del Cauca para ligereza
         valle_features = []
         for feature in data["features"]:
-            # Normalizamos el departamento para comparar
-            dpto = normalizar(feature["properties"].get("DPTO_CNMBR", ""))
-            if dpto == "VALLE DEL CAUCA":
-                # Normalizamos el municipio para el mapeo con los datos
-                feature["properties"]["MPIO_NORM"] = normalizar(feature["properties"].get("MPIO_CNMBR", ""))
+            props = feature["properties"]
+            # Buscamos el nombre del departamento en diferentes posibles llaves
+            dpto_val = props.get("DPTO_CNMBR") or props.get("dpto") or props.get("NOMBRE_DPT") or ""
+            
+            if normalizar(dpto_val) == "VALLE DEL CAUCA":
+                # Buscamos el nombre del municipio
+                m_name = props.get("MPIO_CNMBR") or props.get("mpio") or props.get("NOMBRE_MPI") or ""
+                # Creamos una llave estándar para el cruce de datos
+                props["MPIO_NORM"] = normalizar(m_name)
                 valle_features.append(feature)
         
+        if not valle_features:
+            return None
+            
         data["features"] = valle_features
         return data
-    except Exception as e:
+    except Exception:
         return None
 
 # --- 5. LOGICA DE AUTENTICACIÓN ---
@@ -213,7 +218,7 @@ def check_auth():
         return False
     return True
 
-# --- 6. VISTAS DEL DASHBOARD ---
+# --- 6. VISTAS ---
 def view_registro():
     st.title("🗳️ Nuevo Registro")
     if "f_reset" not in st.session_state: st.session_state.f_reset = 0
@@ -239,22 +244,22 @@ def view_registro():
                     "barrio": bar.upper(), "ciudad": ciu.upper(), "puesto": pue.upper()
                 })
                 if success:
-                    st.success("¡Registro guardado exitosamente!")
+                    st.success("¡Registro guardado!")
                     st.session_state.f_reset += 1
                     time.sleep(1)
                     st.rerun()
-                else: st.error("Error al conectar con la base de datos.")
-            else: st.warning("Nombre, Cédula y Teléfono son obligatorios.")
+                else: st.error("Error al guardar.")
+            else: st.warning("Nombre, Cédula y Teléfono obligatorios.")
 
 def view_estadisticas():
     df = get_data()
     if df.empty:
-        st.info("No hay datos disponibles para mostrar.")
+        st.info("No hay datos para mostrar.")
         return
 
     st.title("Pulse Analytics | Valle del Cauca")
     
-    # --- HERO META ---
+    # --- HERO ---
     total = len(df)
     perc = min((total / META_REGISTROS) * 100, 100)
     st.markdown(f"""
@@ -281,19 +286,18 @@ def view_estadisticas():
     v_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
 
     k1, k2, k3, k4 = st.columns(4)
-    metricas = [("Hoy", v_hoy), ("Últ. 8 días", v_8d), ("Últ. 30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]
-    for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
+    for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
     # --- MAPA ---
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📍 Cobertura Territorial")
+    st.subheader("📍 Distribución Territorial")
     
+    # Preparación de datos del mapa
     m_df = df.copy()
-    m_df['Municipio_Map'] = m_df['Ciudad'].apply(normalizar_para_mapa)
-    map_data = m_df['Municipio_Map'].value_counts().reset_index()
-    map_data.columns = ['Municipio', 'Registros']
-    map_data["Municipio_Norm"] = map_data["Municipio"].apply(normalizar)
+    m_df['MPIO_MATCH'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
+    map_data = m_df['MPIO_MATCH'].value_counts().reset_index()
+    map_data.columns = ['Municipio_Norm', 'Registros']
     
     c_map_view, c_map_stats = st.columns([2, 1])
     
@@ -310,25 +314,33 @@ def view_estadisticas():
                 template="plotly_white",
                 labels={'Registros': 'Total'}
             )
-            fig.update_geos(fitbounds="locations", visible=False)
-            fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=500)
+            # Ajustamos para que se vea el Valle del Cauca incluso si hay pocos datos
+            fig.update_geos(
+                fitbounds="locations", 
+                visible=True, # Cambiado a True para ver contornos base
+                showcountries=False,
+                showcoastlines=True,
+                coastlinecolor="#E2E8F0"
+            )
+            fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("El servidor de mapas no está disponible temporalmente. Mostrando tabla de datos.")
-            st.dataframe(map_data[['Municipio', 'Registros']], use_container_width=True)
+            st.error("No se pudo cargar la capa geográfica del Valle del Cauca.")
+            st.dataframe(map_data, use_container_width=True)
 
     with c_map_stats:
-        st.write("**🔥 Hotspots (Top 5)**")
-        for _, row in map_data.head(5).iterrows():
+        st.write("**🔥 Zonas con más actividad**")
+        top_data = map_data.head(5)
+        for _, row in top_data.iterrows():
             st.markdown(f"""
                 <div class="rank-item" style="padding:10px; margin-bottom:8px;">
-                    <span style="font-weight:600;">{row['Municipio']}</span>
+                    <span style="font-weight:600;">{row['Municipio_Norm']}</span>
                     <span class="hotspot-pill">{row['Registros']} regs</span>
                 </div>
             """, unsafe_allow_html=True)
         
-        st.metric("Municipios Cubiertos", f"{len(map_data)} / {MUNICIPIOS_VALLE}")
-        st.metric("Promedio x Municipio", f"{int(map_data['Registros'].mean())}")
+        st.metric("Municipios Registrados", f"{len(map_data)} / {MUNICIPIOS_VALLE}")
+        st.metric("Media por Municipio", f"{int(map_data['Registros'].mean()) if not map_data.empty else 0}")
 
     # --- RANKING Y TENDENCIA ---
     st.markdown("---")
@@ -362,7 +374,6 @@ def view_busqueda():
     if not df.empty:
         q = st.text_input("Buscar por nombre, cédula o municipio...").upper()
         if q:
-            # Filtrar en todas las columnas convirtiendo a string
             res = df[df.astype(str).apply(lambda x: q in x.str.upper().values, axis=1)]
             st.dataframe(res, use_container_width=True)
         else:
