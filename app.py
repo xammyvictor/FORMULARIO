@@ -261,7 +261,6 @@ if check_auth():
         if not df.empty:
             st.title("Pulse Analytics | Valle del Cauca")
             
-            # --- HERO META ---
             total = len(df)
             perc = min((total / META_REGISTROS) * 100, 100)
             st.markdown(f"""
@@ -280,7 +279,6 @@ if check_auth():
                 </div>
             """, unsafe_allow_html=True)
 
-            # --- KPIs ---
             hoy = datetime.now()
             df['F_S'] = df['Fecha Registro'].dt.date
             v_hoy = len(df[df['F_S'] == hoy.date()])
@@ -293,7 +291,7 @@ if check_auth():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- MAPA RECONSTRUIDO Y CORREGIDO ---
+            # --- MAPA RECONSTRUIDO CON LOGICA DE FILTRADO ROBUSTA ---
             st.subheader("📍 Mapa de Calor y Concentración Territorial")
             
             m_df = df.copy()
@@ -307,16 +305,24 @@ if check_auth():
                 map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots"], horizontal=True)
                 
                 try:
-                    # CARGA DE URL NACIONAL (Verificada)
+                    # CARGA DE URL NACIONAL (Respaldo activo)
                     url_geojson = "https://raw.githubusercontent.com/marcovega/colombia-json/master/colombia.min.json"
                     response = requests.get(url_geojson, timeout=10)
                     data_full = response.json()
                     
-                    # FILTRADO DE FEATURES: Evita el error 'list indices must be integers'
-                    # Se recorre la lista de 'features' y se filtra por propiedad de departamento
+                    # LOGICA ROBUSTA PARA EVITAR 'list indices must be integers'
+                    # Algunos JSON devuelven una lista de features directamente, otros un objeto FeatureCollection
+                    if isinstance(data_full, list):
+                        features_list = data_full
+                    elif isinstance(data_full, dict) and 'features' in data_full:
+                        features_list = data_full['features']
+                    else:
+                        features_list = []
+
+                    # FILTRADO DE FEATURES PARA EL VALLE DEL CAUCA
                     valle_features = [
-                        f for f in data_full['features'] 
-                        if f.get('properties', {}).get('DPTO_CNMBRE') == 'VALLE DEL CAUCA'
+                        f for f in features_list 
+                        if isinstance(f, dict) and f.get('properties', {}).get('DPTO_CNMBRE') == 'VALLE DEL CAUCA'
                     ]
                     
                     valle_geojson = {
