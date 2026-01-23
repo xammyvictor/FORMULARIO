@@ -81,7 +81,8 @@ def normalizar_para_mapa(muni):
         "VIJES": "VIJES",
         "YOTOCO": "YOTOCO"
     }
-    return mapping.get(m, m)
+    res = mapping.get(m, m)
+    return normalizar(res)
 
 # --- 3. ESTILOS VISUALES ---
 def apply_custom_styles():
@@ -376,6 +377,7 @@ def view_estadisticas():
                 showlegend=False
             ))
             
+            # Forzamos que el mapa use todo el canvas sin bordes internos
             fig.update_geos(
                 fitbounds="locations",
                 visible=False,
@@ -388,6 +390,7 @@ def view_estadisticas():
                 selector=dict(type='choropleth')
             )
             
+            # Altura al máximo y márgenes a cero absoluto
             fig.update_layout(
                 margin={"r":0,"t":0,"l":0,"b":0}, 
                 height=1000,
