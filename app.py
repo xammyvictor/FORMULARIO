@@ -314,6 +314,14 @@ if check_auth():
                     geojson_url = "https://raw.githubusercontent.com/caticoa3/colombia_mapa/master/co_2018_MGN_MPIO_POLITICO.geojson"
                     response = requests.get(geojson_url)
                     geojson_data = response.json()
+
+                    # --- DEBUG MATCH MUNICIPIOS ---
+geo_names = {f["properties"]["NOM_MPIO"] for f in geojson_data["features"]}
+data_names = set(map_data["Municipio"])
+
+st.write("Coincidencias:", len(data_names & geo_names))
+st.write("No encontrados:", data_names - geo_names)
+
                     
                     if map_mode == "Coropleta Territorial":
                         # Mapa de Calor por regiones (Dibujo limpio)
@@ -325,7 +333,7 @@ if check_auth():
     color="Registros",
     color_continuous_scale="YlOrRd",
     template="plotly_white",
-    labels={"Registros": "Total Registros"}
+    
 )
 
                     else:
