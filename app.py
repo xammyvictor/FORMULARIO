@@ -269,13 +269,19 @@ with c_map_view:
     # --------------------------------------------------
     # BÚSQUEDA
     # --------------------------------------------------
-    elif opcion == "🔍 Búsqueda":
-        st.title("🔍 Búsqueda")
-        df = get_data()
-        if not df.empty:
-            q = st.text_input("Buscar").upper()
-            if q:
-                res = df[df.astype(str).apply(lambda x: q in " ".join(x), axis=1)]
-                st.dataframe(res, use_container_width=True)
-            else:
-                st.dataframe(df.tail(100), use_container_width=True)
+   elif opcion == "🔍 Búsqueda":
+    st.title("🔍 Explorador de Registros")
+
+    df = get_data()
+    if df.empty:
+        st.info("No hay datos para mostrar.")
+    else:
+        q = st.text_input("Buscar...").upper()
+
+        if q:
+            res = df[df.astype(str).apply(
+                lambda x: x.str.upper().str.contains(q, na=False)
+            , axis=1)]
+            st.dataframe(res, use_container_width=True)
+        else:
+            st.dataframe(df.tail(100), use_container_width=True)
