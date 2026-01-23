@@ -185,11 +185,11 @@ if check_auth():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- MAPA (CORREGIDO) ---
+            # --- MAPA (REDERIZADO SEGURO) ---
             st.subheader("📍 Concentración Territorial")
             
+            # Procesamos datos para asegurar que no haya nulos y los nombres estén limpios
             m_df = df.copy()
-            # Aseguramos limpieza y mayúsculas para coincidir con "name":"BUGA"
             m_df['Municipio_Map'] = m_df['Ciudad'].astype(str).str.upper().str.strip()
             map_data = m_df['Municipio_Map'].value_counts().reset_index()
             map_data.columns = ['Municipio', 'Registros']
@@ -197,44 +197,59 @@ if check_auth():
             c_map_view, c_map_stats = st.columns([2, 1])
             
             with c_map_view:
+                # Intentamos obtener el GeoJSON con un timeout más largo
+                geojson_url = "https://raw.githubusercontent.com/finiterank/mapa-colombia-js/master/colombia-municipios.json"
                 try:
-                    geojson_url = "https://raw.githubusercontent.com/finiterank/mapa-colombia-js/master/colombia-municipios.json"
-                    response = requests.get(geojson_url, timeout=10)
+                    response = requests.get(geojson_url, timeout=15)
+                    response.raise_for_status()
                     geojson_data = response.json()
                     
-                    fig = px.choropleth(
-                        map_data, 
-                        geojson=geojson_data, 
-                        locations='Municipio',
-                        featureidkey="properties.name", # Coincide con tu observación
-                        color='Registros',
-                        color_continuous_scale="Reds",
-                        template="plotly_white"
-                    )
+                    if not map_data.empty:
+                        fig = px.choropleth(
+                            map_data, 
+                            geojson=geojson_data, 
+                            locations='Municipio',
+                            featureidkey="properties.name",
+                            color='Registros',
+                            color_continuous_scale="Reds",
+                            template="plotly_white",
+                            # Usamos el fitbounds solo si hay datos para evitar que el mapa desaparezca
+                            scope="south america" 
+                        )
 
-                    fig.update_geos(
-                        fitbounds="locations", 
-                        visible=False
-                    )
-                    
-                    fig.update_layout(
-                        margin={"r":0,"t":0,"l":0,"b":0}, 
-                        height=550,
-                        coloraxis_colorbar=dict(title="Cant.", thickness=15)
-                    )
-                    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                        fig.update_geos(
+                            fitbounds="locations", 
+                            visible=False,
+                            showcountries=False,
+                            showcoastlines=False
+                        )
+                        
+                        fig.update_layout(
+                            margin={"r":0,"t":0,"l":0,"b":0}, 
+                            height=550,
+                            coloraxis_colorbar=dict(title="Cant.", thickness=15)
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.info("No hay datos de municipios para mostrar en el mapa.")
+                        
                 except Exception as e:
-                    st.info("Cargando mapa base o error en datos...")
+                    # Si falla el dibujo, mostramos el error técnico para diagnosticar
+                    st.error(f"Error al dibujar el mapa: {str(e)}")
+                    st.info("Nota: Verifique que la columna 'Ciudad' contenga nombres exactos como aparecen en el JSON (ej. 'BUGA').")
 
             with c_map_stats:
                 st.write("**🔥 Cobertura por Municipio**")
-                for _, row in map_data.head(10).iterrows():
-                    st.markdown(f"""
-                        <div class="rank-item">
-                            <span class="rank-name">{row['Municipio']}</span>
-                            <span class="hotspot-pill">{row['Registros']} regs</span>
-                        </div>
-                    """, unsafe_allow_html=True)
+                if not map_data.empty:
+                    for _, row in map_data.head(10).iterrows():
+                        st.markdown(f"""
+                            <div class="rank-item">
+                                <span class="rank-name">{row['Municipio']}</span>
+                                <span class="hotspot-pill">{row['Registros']} regs</span>
+                            </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.write("Sin datos.")
 
             # --- RANKING ---
             st.markdown("---")
