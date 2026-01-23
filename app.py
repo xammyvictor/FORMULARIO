@@ -130,9 +130,10 @@ def save_data(data_dict):
         return True
     except: return False
 
-# --- NORMALIZACIÓN DE MUNICIPIOS (MAPEO EXACTO) ---
+# --- NORMALIZACIÓN DE MUNICIPIOS (CRÍTICO PARA EL MAPA) ---
 def normalizar_muni(muni):
     m = str(muni).upper().strip()
+    # Este mapeo asegura que los nombres del Excel coincidan con los nombres del GeoJSON
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
@@ -155,23 +156,41 @@ def normalizar_muni(muni):
         "SEVILLA": "SEVILLA",
         "CAICEDONIA": "CAICEDONIA",
         "ANSERMANUEVO": "ANSERMANUEVO",
-        "BOLIVAR": "BOLÍVAR"
+        "ARGELIA": "ARGELIA",
+        "BOLIVAR": "BOLÍVAR",
+        "BUENAVENTURA": "BUENAVENTURA",
+        "BUGALAGRANDE": "BUGALAGRANDE",
+        "CANDELARIA": "CANDELARIA",
+        "DAGUA": "DAGUA",
+        "EL AGUILA": "EL ÁGUILA",
+        "EL CAIRO": "EL CAIRO",
+        "EL DOVIO": "EL DOVIO",
+        "LA CUMBRE": "LA CUMBRE",
+        "LA VICTORIA": "LA VICTORIA",
+        "OBANDO": "OBANDO",
+        "RESTREPO": "RESTREPO",
+        "RIOFRIO": "RIOFRIO",
+        "SAN PEDRO": "SAN PEDRO",
+        "TORO": "TORO",
+        "TRUJILLO": "TRUJILLO",
+        "ULLOA": "ULLOA",
+        "VERSALLES": "VERSALLES",
+        "VIJES": "VIJES",
+        "YOTOCO": "YOTOCO"
     }
     return mapping.get(m, m)
 
-# --- CARGA DEL DIBUJO DEL MAPA (CON FALLBACK RESILIENTE) ---
+# --- CARGA DEL DIBUJO DEL MAPA (GEOJSON RESILIENTE) ---
 @st.cache_data(ttl=3600)
 def load_valle_geojson():
-    # Intentamos con el CDN de jsDelivr que es el más rápido y estable para aplicaciones web
+    # Usamos jsDelivr como fuente para evitar bloqueos de GitHub Raw
     url = "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json"
     try:
-        # Añadimos verify=False para evitar errores de certificados en redes restringidas
-        r = requests.get(url, timeout=15, verify=False)
+        r = requests.get(url, timeout=10, verify=False)
         if r.status_code == 200:
             return r.json()
-    except Exception as e:
-        st.warning(f"Aviso técnico: Usando motor cartográfico de respaldo. {e}")
-    return None
+    except:
+        return None
 
 # --- AUTH ---
 def check_auth():
@@ -234,7 +253,7 @@ if check_auth():
             if st.form_submit_button("GUARDAR REGISTRO"):
                 if nom and ced and tel:
                     if save_data({"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dire.upper(),"barrio":bar.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}):
-                        st.success("✅ ¡Registro guardado con éxito!")
+                        st.success("✅ ¡Registro guardado!")
                         st.session_state.f_reset += 1 
                         time.sleep(1)
                         st.rerun()
@@ -281,41 +300,45 @@ if check_auth():
             c_map, c_rank = st.columns([1.6, 1])
             
             with c_map:
-                st.subheader("📍 Cobertura Territorial del Valle")
+                st.subheader("📍 Mapa de Calor Territorial")
                 m_df = df.copy()
-                m_df['M_Map'] = m_df['Ciudad'].apply(normalizar_muni)
-                map_data = m_df['M_Map'].value_counts().reset_index()
+                # Aplicamos la normalización estricta antes de agrupar
+                m_df['Municipio_Map'] = m_df['Ciudad'].apply(normalizar_muni)
+                map_data = m_df['Municipio_Map'].value_counts().reset_index()
                 map_data.columns = ['Municipio', 'Registros']
                 
                 geojson = load_valle_geojson()
                 if geojson:
-                    # Mapa Coroplético (DIBUJO TERRITORIAL)
+                    # Mapa Coroplético (DIBUJO TERRITORIAL SIN FONDO DE MAPA MUNDIAL)
                     fig = px.choropleth(
                         map_data, 
                         geojson=geojson, 
                         locations='Municipio',
-                        featureidkey="properties.name", 
+                        featureidkey="properties.name", # Match con el nombre en el GeoJSON
                         color='Registros',
                         color_continuous_scale="Reds", 
                         template="plotly_white",
                         hover_name="Municipio"
                     )
-                    fig.update_geos(fitbounds="locations", visible=False)
-                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550, coloraxis_showscale=True)
+                    # Forzamos a que solo se vea el dibujo (sin océanos ni otros países)
+                    fig.update_geos(
+                        fitbounds="locations", 
+                        visible=False,
+                        resolution=50,
+                        showcoastlines=False,
+                        showcountries=False
+                    )
+                    fig.update_layout(
+                        margin={"r":0,"t":0,"l":0,"b":0}, 
+                        height=600, 
+                        coloraxis_showscale=True,
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)'
+                    )
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 else:
-                    # FALLBACK: Si el GeoJSON falla, usamos un mapa de burbujas (Scatter Mapbox)
-                    # que es más probable que cargue ya que usa el motor interno de Plotly
-                    st.error("Utilizando visualización geográfica simplificada por restricciones de red.")
-                    # Coordenadas aproximadas de los municipios para el fallback
-                    coords = {'SANTIAGO DE CALI': [3.4516, -76.5320], 'GUADALAJARA DE BUGA': [3.9009, -76.3008], 'PALMIRA': [3.5394, -76.3036], 'TULUÁ': [4.0847, -76.1954]}
-                    map_data['lat'] = map_data['Municipio'].apply(lambda x: coords.get(x, [3.9, -76.3])[0])
-                    map_data['lon'] = map_data['Municipio'].apply(lambda x: coords.get(x, [3.9, -76.3])[1])
-                    
-                    fig = px.scatter_mapbox(map_data, lat="lat", lon="lon", size="Registros", color="Registros",
-                                          color_continuous_scale="Reds", size_max=40, zoom=8,
-                                          mapbox_style="carto-positron", hover_name="Municipio")
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.error("Error al cargar el dibujo del mapa. Mostrando resumen:")
+                    st.dataframe(map_data, use_container_width=True, hide_index=True)
 
             with c_rank:
                 st.subheader("🏆 TOP Líderes")
@@ -346,7 +369,7 @@ if check_auth():
         st.title("🔍 Buscador de Registros")
         df = get_data()
         if not df.empty:
-            q = st.text_input("Buscar por Nombre, Cédula o Ciudad").upper()
+            q = st.text_input("Nombre, Cédula o Ciudad").upper()
             if q:
                 res = df[df.astype(str).apply(lambda x: q in x.values, axis=1)]
                 st.dataframe(res, use_container_width=True)
