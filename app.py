@@ -59,7 +59,7 @@ def normalizar_para_mapa(muni):
         "RESTREPO": "RESTREPO",
         "ROLDANILLO": "ROLDANILLO",
         "SEVILLA": "SEVILLA",
-        "CALI": "CALI",
+        "CALI": "SANTIAGO DE CALI",
         "ZARZAL": "ZARZAL"
     }
     return mapping.get(m, m)
