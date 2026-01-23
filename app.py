@@ -321,7 +321,7 @@ if check_auth():
                             map_data, 
                             geojson=geojson_data, 
                             locations='Municipio',
-                            featureidkey="properties.name", 
+                            featureidkey="properties.NOM_MPIO", 
                             color='Registros',
                             color_continuous_scale="YlOrRd", # Amarillo -> Naranja -> Rojo (Intuitivo)
                             template="plotly_white",
