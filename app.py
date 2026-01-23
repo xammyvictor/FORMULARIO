@@ -38,7 +38,7 @@ def normalizar_para_mapa(muni):
     m = normalizar(muni)
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
-        "CALI": "CALI",
+        "SANTIAGO DE CALI": "CALI",
         "JAMUNDI": "JAMUNDI",
         "TULUA": "TULUA",
         "GUACARI": "GUACARI",
