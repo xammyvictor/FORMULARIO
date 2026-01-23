@@ -8,6 +8,7 @@ from io import BytesIO
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import requests
 import json
 import numpy as np
 
@@ -37,7 +38,7 @@ st.markdown("""
     * { font-family: 'Plus Jakarta Sans', sans-serif; }
     .stApp { background-color: var(--pulse-bg); }
 
-    /* Tarjetas KPI */
+    /* Tarjetas KPI Estilo Pulse */
     .pulse-card {
         background: white;
         padding: 24px;
@@ -49,7 +50,7 @@ st.markdown("""
     .pulse-label { color: var(--pulse-slate); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
     .pulse-value { color: var(--pulse-dark); font-size: 2.2rem; font-weight: 800; margin: 8px 0; line-height: 1; }
 
-    /* Hero Meta */
+    /* Hero Meta Section */
     .hero-section {
         background: var(--pulse-dark);
         color: white;
@@ -58,7 +59,7 @@ st.markdown("""
         margin-bottom: 35px;
         box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
     }
-    .hero-big-num { font-size: 4rem; font-weight: 800; color: white !important; }
+    .hero-big-num { font-size: 4rem; font-weight: 800; color: white !important; line-height: 1; }
     .hero-perc { font-size: 2.5rem; font-weight: 800; color: var(--pulse-pink); }
     
     .progress-track {
@@ -73,7 +74,7 @@ st.markdown("""
         background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%);
         height: 100%;
         border-radius: 20px;
-        transition: width 1.5s ease;
+        transition: width 1.5s ease-in-out;
     }
 
     /* Botones y Formulario */
@@ -129,9 +130,10 @@ def save_data(data_dict):
         return True
     except: return False
 
-# --- NORMALIZACIÓN DE MUNICIPIOS ---
+# --- NORMALIZACIÓN DE MUNICIPIOS (CRÍTICO PARA EL MAPA) ---
 def normalizar_muni(muni):
     m = str(muni).upper().strip()
+    # Este diccionario mapea nombres comunes a los nombres exactos en el dibujo GeoJSON
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
@@ -158,13 +160,11 @@ def normalizar_muni(muni):
         "BOLIVAR": "BOLÍVAR",
         "BUENAVENTURA": "BUENAVENTURA",
         "BUGALAGRANDE": "BUGALAGRANDE",
-        "CALIMA EL DARIEN": "CALIMA",
         "CANDELARIA": "CANDELARIA",
         "DAGUA": "DAGUA",
         "EL AGUILA": "EL ÁGUILA",
         "EL CAIRO": "EL CAIRO",
         "EL DOVIO": "EL DOVIO",
-        "GUACARI": "GUACARÍ",
         "LA CUMBRE": "LA CUMBRE",
         "LA VICTORIA": "LA VICTORIA",
         "OBANDO": "OBANDO",
@@ -180,17 +180,23 @@ def normalizar_muni(muni):
     }
     return mapping.get(m, m)
 
-# --- DIBUJO DEL MAPA EMBEBIDO (SOLUCIÓN DEFINITIVA) ---
-# He simplificado el GeoJSON para que resida aquí mismo. Esto elimina la dependencia externa.
-def get_valle_map_data():
-    # URL de respaldo extremadamente estable
-    url = "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json"
-    try:
-        r = requests.get(url, timeout=5)
-        return r.json()
-    except:
-        # Si fallara hasta el CDN, Streamlit intentará cargar el dibujo básico de Plotly
-        return None
+# --- CARGA DEL DIBUJO DEL MAPA (GEOJSON) ---
+@st.cache_data(ttl=3600)
+def load_valle_geojson():
+    # Intentamos con 3 fuentes distintas para garantizar la carga
+    urls = [
+        "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json",
+        "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json",
+        "https://gist.githubusercontent.com/john-guerra/43c7656821069d00dcbc/raw/be381f21d3f381c8286a0740685970c6a51d45a9/valle.json"
+    ]
+    for url in urls:
+        try:
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200:
+                return r.json()
+        except:
+            continue
+    return None
 
 # --- AUTH ---
 def check_auth():
@@ -203,7 +209,7 @@ def check_auth():
         st.session_state.ref_checked = True
 
     if not st.session_state.logged_in:
-        st.markdown("<div style='text-align:center; padding-top: 100px;'><h1>Pulse Analytics</h1><p>Sistema Maria Irma</p></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; padding-top: 100px;'><h1>Pulse Login</h1></div>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 1.2, 1])
         with col2:
             u = st.text_input("Usuario")
@@ -253,11 +259,11 @@ if check_auth():
             if st.form_submit_button("GUARDAR REGISTRO"):
                 if nom and ced and tel:
                     if save_data({"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dire.upper(),"barrio":bar.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}):
-                        st.success("✅ ¡Registro guardado!")
+                        st.success("✅ ¡Registro guardado con éxito!")
                         st.session_state.f_reset += 1 
                         time.sleep(1)
                         st.rerun()
-                else: st.warning("Complete Nombre, Cédula y Teléfono")
+                else: st.warning("Por favor complete Nombre, Cédula y Teléfono")
 
     # --- ESTADÍSTICAS ---
     elif opcion == "📊 Estadísticas":
@@ -300,25 +306,31 @@ if check_auth():
             c_map, c_rank = st.columns([1.6, 1])
             
             with c_map:
-                st.subheader("📍 Mapa Territorial del Valle")
+                st.subheader("📍 Cobertura Territorial del Valle")
                 m_df = df.copy()
                 m_df['M_Map'] = m_df['Ciudad'].apply(normalizar_muni)
                 map_data = m_df['M_Map'].value_counts().reset_index()
                 map_data.columns = ['Municipio', 'Registros']
                 
-                geojson = get_valle_map_data()
+                geojson = load_valle_geojson()
                 if geojson:
+                    # Mapa Coroplético (El dibujo real de los municipios)
                     fig = px.choropleth(
-                        map_data, geojson=geojson, locations='Municipio',
-                        featureidkey="properties.name", color='Registros',
-                        color_continuous_scale="Reds", template="plotly_white",
+                        map_data, 
+                        geojson=geojson, 
+                        locations='Municipio',
+                        featureidkey="properties.name", 
+                        color='Registros',
+                        color_continuous_scale="Reds", 
+                        template="plotly_white",
                         hover_name="Municipio"
                     )
                     fig.update_geos(fitbounds="locations", visible=False)
                     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550, coloraxis_showscale=True)
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 else:
-                    st.info("Visualizando datos de gestión por municipio:")
+                    st.error("⚠️ No se pudo cargar el dibujo del mapa. Revisa tu conexión a internet.")
+                    st.info("Resumen de gestión por municipio:")
                     st.bar_chart(map_data.set_index('Municipio'))
 
             with c_rank:
@@ -340,7 +352,7 @@ if check_auth():
 
             # 4. TENDENCIA
             st.markdown("---")
-            st.subheader("📈 Ritmo de Crecimiento")
+            st.subheader("📈 Actividad de Ingresos")
             trend = df.groupby('F_S').size().reset_index(name='Ingresos')
             fig_t = px.area(trend, x='F_S', y='Ingresos', color_discrete_sequence=['#E91E63'])
             fig_t.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=300, xaxis_title=None, yaxis_title=None)
@@ -350,7 +362,7 @@ if check_auth():
         st.title("🔍 Buscador de Registros")
         df = get_data()
         if not df.empty:
-            q = st.text_input("Nombre, Cédula o Ciudad").upper()
+            q = st.text_input("Buscar por Nombre, Cédula o Ciudad").upper()
             if q:
                 res = df[df.astype(str).apply(lambda x: q in x.values, axis=1)]
                 st.dataframe(res, use_container_width=True)
