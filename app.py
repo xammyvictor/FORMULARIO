@@ -149,18 +149,29 @@ def normalizar_muni(muni):
         "FLORIDA": "FLORIDA",
         "PRADERA": "PRADERA",
         "EL CERRITO": "EL CERRITO",
-        "GINEBRA": "GINEBRA"
+        "GINEBRA": "GINEBRA",
+        "LA UNION": "LA UNIÓN",
+        "SEVILLA": "SEVILLA",
+        "CAICEDONIA": "CAICEDONIA"
     }
     return mapping.get(m, m)
 
-# --- CARGA DE GEOJSON (CACHED) ---
-@st.cache_data
+# --- CARGA DE GEOJSON (OPTIMIZADO CON TIME-OUT Y FALLBACK) ---
+@st.cache_data(ttl=3600)
 def load_valle_geojson():
-    url = "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json"
-    try:
-        r = requests.get(url, timeout=10)
-        return r.json()
-    except: return None
+    # URL de respaldo en caso de que la principal falle
+    urls = [
+        "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json",
+        "https://gist.githubusercontent.com/john-guerra/43c7656821069d00dcbc/raw/be381f21d3f381c8286a0740685970c6a51d45a9/valle.json"
+    ]
+    for url in urls:
+        try:
+            r = requests.get(url, timeout=5)
+            if r.status_code == 200:
+                return r.json()
+        except:
+            continue
+    return None
 
 # --- AUTH ---
 def check_auth():
@@ -224,7 +235,7 @@ if check_auth():
                 if nom and ced and tel:
                     if save_data({"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dire.upper(),"barrio":bar.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}):
                         st.success("✅ ¡Registro guardado!")
-                        st.session_state.f_reset += 1 # Limpieza de campos al cambiar la key
+                        st.session_state.f_reset += 1 
                         time.sleep(1)
                         st.rerun()
                 else: st.warning("Complete Nombre, Cédula y Teléfono")
@@ -282,13 +293,15 @@ if check_auth():
                     fig = px.choropleth(
                         map_data, geojson=geojson, locations='Municipio',
                         featureidkey="properties.name", color='Registros',
-                        color_continuous_scale="Reds", template="plotly_white"
+                        color_continuous_scale="Reds", template="plotly_white",
+                        hover_name="Municipio"
                     )
                     fig.update_geos(fitbounds="locations", visible=False)
-                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550, coloraxis_showscale=False)
+                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550, coloraxis_showscale=True)
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 else:
-                    st.info("Cargando dibujo del mapa...")
+                    st.error("No se pudo cargar el dibujo del mapa desde el servidor. Mostrando tabla de datos.")
+                    st.dataframe(map_data, use_container_width=True)
 
             with c_rank:
                 st.subheader("🏆 TOP Líderes")
