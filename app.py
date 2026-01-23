@@ -303,16 +303,17 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA RECONFIGURADO (CON NOMBRES) ---
+    # --- MAPA MAXIMIZADO ---
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📍 Concentración Territorial (Valle del Cauca)")
+    st.subheader("📍 Mapa Detallado de Concentración Territorial")
     
     m_df = df.copy()
     m_df['ID_MPIO'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
     counts = m_df['ID_MPIO'].value_counts().reset_index()
     counts.columns = ['ID_MPIO', 'Registros']
     
-    c_map_view, c_map_stats = st.columns([2.5, 1])
+    # Aumentamos el espacio para el mapa [3.5, 1] en lugar de [2.5, 1]
+    c_map_view, c_map_stats = st.columns([3.5, 1])
     
     with c_map_view:
         geojson_data = get_valle_geojson(URL_GITHUB_GEO)
@@ -320,7 +321,6 @@ def view_estadisticas():
             all_features = geojson_data["features"]
             all_ids = [f["id"] for f in all_features]
             
-            # Obtener centros aproximados para etiquetas
             lats, lons, names = [], [], []
             for f in all_features:
                 coords = f["geometry"]["coordinates"]
@@ -336,7 +336,6 @@ def view_estadisticas():
             df_base = pd.DataFrame({"ID_MPIO": all_ids})
             map_data_full = df_base.merge(counts, on='ID_MPIO', how='left').fillna(0)
             
-            # Choropleth
             fig = px.choropleth(
                 map_data_full, 
                 geojson=geojson_data, 
@@ -346,13 +345,13 @@ def view_estadisticas():
                 labels={'Registros': 'Total'}
             )
             
-            # Capa de etiquetas de texto
+            # Capa de etiquetas con fuente más grande (size=10)
             fig.add_trace(go.Scattergeo(
                 lat=lats,
                 lon=lons,
                 text=names,
                 mode='text',
-                textfont=dict(size=8, color="black", family="Plus Jakarta Sans"),
+                textfont=dict(size=10, color="black", family="Plus Jakarta Sans", weight="bold"),
                 hoverinfo='none',
                 showlegend=False
             ))
@@ -363,17 +362,18 @@ def view_estadisticas():
             )
             
             fig.update_traces(
-                marker_line_width=1.2,
+                marker_line_width=1.5,
                 marker_line_color="black",
                 selector=dict(type='choropleth')
             )
             
+            # Altura aumentada a 950 para mejor apreciación
             fig.update_layout(
-                margin={"r":0,"t":0,"l":0,"b":0}, 
-                height=700,
+                margin={"r":0,"t":20,"l":0,"b":0}, 
+                height=950,
                 paper_bgcolor="white",
                 plot_bgcolor="white",
-                coloraxis_colorbar=dict(title="REGISTROS", thickness=20, len=0.5)
+                coloraxis_colorbar=dict(title="REGISTROS", thickness=25, len=0.6, y=0.5)
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -382,11 +382,11 @@ def view_estadisticas():
 
     with c_map_stats:
         st.write("**🔥 Ranking Municipal**")
-        for _, row in counts.head(10).iterrows():
+        for _, row in counts.head(15).iterrows(): # Mostramos más municipios en el lateral
             st.markdown(f"""
-                <div class="rank-item" style="padding:12px; margin-bottom:8px;">
-                    <span style="font-weight:600; font-size:0.9rem;">{row['ID_MPIO']}</span>
-                    <span class="hotspot-pill">{row['Registros']} regs</span>
+                <div class="rank-item" style="padding:10px; margin-bottom:8px;">
+                    <span style="font-weight:600; font-size:0.85rem;">{row['ID_MPIO']}</span>
+                    <span class="hotspot-pill">{row['Registros']}</span>
                 </div>
             """, unsafe_allow_html=True)
         
