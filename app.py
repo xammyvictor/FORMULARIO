@@ -34,15 +34,13 @@ def normalizar(texto):
     return " ".join(texto.split())
 
 def normalizar_para_mapa(muni):
-    """Mapea nombres de entrada a una identificación estándar compartida entre DB y GeoJSON."""
+    """Convierte nombres de la base de datos a los nombres oficiales del GeoJSON DANE."""
     m = normalizar(muni)
     
-    # ESTANDARIZACIÓN CRÍTICA PARA CALI
-    if "CALI" in m:
-        return "CALI"
-    
-    # Mapeo de otros municipios para coincidir con nombres comunes o DANE
+    # Diccionario de traducción: Nombre en DB -> Nombre exacto en GeoJSON
     mapping = {
+        "CALI": "SANTIAGO DE CALI",
+        "SANTIAGO DE CALI": "SANTIAGO DE CALI",
         "BUGA": "GUADALAJARA DE BUGA",
         "GUADALAJARA DE BUGA": "GUADALAJARA DE BUGA",
         "JAMUNDI": "JAMUNDI",
@@ -66,7 +64,23 @@ def normalizar_para_mapa(muni):
         "RESTREPO": "RESTREPO",
         "ROLDANILLO": "ROLDANILLO",
         "SEVILLA": "SEVILLA",
-        "ZARZAL": "ZARZAL"
+        "ZARZAL": "ZARZAL",
+        "EL DOVIO": "EL DOVIO",
+        "LA VICTORIA": "LA VICTORIA",
+        "OBANDO": "OBANDO",
+        "ANSERMANUEVO": "ANSERMANUEVO",
+        "ARGELIA": "ARGELIA",
+        "BOLIVAR": "BOLIVAR",
+        "EL CAIRO": "EL CAIRO",
+        "EL AGUILA": "EL AGUILA",
+        "LA CUMBRE": "LA CUMBRE",
+        "SAN PEDRO": "SAN PEDRO",
+        "TORO": "TORO",
+        "TRUJILLO": "TRUJILLO",
+        "ULLOA": "ULLOA",
+        "VERSALLES": "VERSALLES",
+        "VIJES": "VIJES",
+        "YOTOCO": "YOTOCO"
     }
     return mapping.get(m, m)
 
@@ -197,14 +211,10 @@ def get_valle_geojson(url):
             valle_features = []
             for feature in data["features"]:
                 props = feature["properties"]
-                # Código DANE del Valle del Cauca es 76
                 if str(props.get("DPTO_CCDGO")) == "76":
-                    # Nombre original para etiquetas
-                    original_name = props.get("MPIO_CNMBR", "")
-                    # Nombre estandarizado para ID de cruce
-                    std_id = normalizar_para_mapa(original_name)
-                    
-                    feature["id"] = std_id
+                    # Identificador único basado en el nombre oficial limpio
+                    m_id = normalizar(props.get("MPIO_CNMBR", ""))
+                    feature["id"] = m_id
                     valle_features.append(feature)
             
             if valle_features:
@@ -282,7 +292,6 @@ def view_estadisticas():
 
     st.title("Pulse Analytics | Valle del Cauca")
     
-    # --- HERO ---
     total = len(df)
     perc = min((total / META_REGISTROS) * 100, 100)
     st.markdown(f"""
@@ -301,24 +310,21 @@ def view_estadisticas():
         </div>
     """, unsafe_allow_html=True)
 
-    # --- KPIs ---
+    k1, k2, k3, k4 = st.columns(4)
     hoy = datetime.now()
     df['F_S'] = df['Fecha Registro'].dt.date
     v_hoy = len(df[df['F_S'] == hoy.date()])
     v_8d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=8))])
     v_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
 
-    k1, k2, k3, k4 = st.columns(4)
-    metricas = [("Hoy", v_hoy), ("Últ. 8 días", v_8d), ("Últ. 30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]
-    for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
+    for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("Últ. 8 días", v_8d), ("Últ. 30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA MAXIMIZADO ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📍 Visualización Territorial Departamental")
     
     m_df = df.copy()
-    # Aplicamos el mapeo estandarizado (Cali -> CALI, Buga -> GUADALAJARA DE BUGA, etc.)
+    # Traducimos lo de la DB (Cali, Buga, etc) al nombre oficial que usa el mapa
     m_df['ID_MPIO'] = m_df['Ciudad'].apply(normalizar_para_mapa)
     counts = m_df['ID_MPIO'].value_counts().reset_index()
     counts.columns = ['ID_MPIO', 'Registros']
@@ -331,7 +337,6 @@ def view_estadisticas():
             all_features = geojson_data["features"]
             all_ids = [f["id"] for f in all_features]
             
-            # Cálculo de centroides para etiquetas
             lats, lons, names = [], [], []
             for f in all_features:
                 coords = f["geometry"]["coordinates"]
@@ -342,23 +347,20 @@ def view_estadisticas():
                 
                 lons.append(coords_flat[:, 0].mean())
                 lats.append(coords_flat[:, 1].mean())
-                names.append(f["id"])
+                names.append(f["properties"].get("MPIO_CNMBR", ""))
 
             df_base = pd.DataFrame({"ID_MPIO": all_ids})
             map_data_full = df_base.merge(counts, on='ID_MPIO', how='left').fillna(0)
             
-            # Choropleth principal
             fig = px.choropleth(
                 map_data_full, 
                 geojson=geojson_data, 
                 locations='ID_MPIO',
                 color='Registros',
-                # Degradado de Blanco -> Rosa Claro -> Rosa Fuerte Pulse
                 color_continuous_scale=[[0, 'white'], [0.0001, '#FCE4EC'], [1, '#E91E63']],
                 labels={'Registros': 'Total'}
             )
             
-            # Etiquetas de texto optimizadas
             fig.add_trace(go.Scattergeo(
                 lat=lats,
                 lon=lons,
@@ -369,49 +371,31 @@ def view_estadisticas():
                 showlegend=False
             ))
             
-            # Configuración geográfica para aislamiento total
-            fig.update_geos(
-                fitbounds="locations",
-                visible=False,
-                showframe=False,
-                projection_type="mercator"
-            )
+            fig.update_geos(fitbounds="locations", visible=False, showframe=False, projection_type="mercator")
+            fig.update_traces(marker_line_width=1.8, marker_line_color="black", selector=dict(type='choropleth'))
             
-            # Estética de fronteras negras
-            fig.update_traces(
-                marker_line_width=1.8,
-                marker_line_color="black",
-                selector=dict(type='choropleth')
-            )
-            
-            # Layout maximizado
             fig.update_layout(
                 margin={"r":0,"t":0,"l":0,"b":0}, 
                 height=1000,
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
-                coloraxis_colorbar=dict(
-                    title="REGISTROS", 
-                    thickness=30, 
-                    len=0.6, 
-                    yanchor="middle", y=0.5,
-                    xanchor="left", x=0.01
-                )
+                coloraxis_colorbar=dict(title="REGISTROS", thickness=30, len=0.6, yanchor="middle", y=0.5, xanchor="left", x=0.01)
             )
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         else:
-            st.error("⚠️ Error cargando GeoJSON.")
+            st.error("⚠️ Error cargando mapa.")
 
     with c_map_stats:
         st.write("**🔥 Ranking**")
-        for _, row in counts.head(15).iterrows(): 
+        # Mostrar el ranking real del dataframe original para mayor precisión visual
+        ranking_display = counts.sort_values("Registros", ascending=False)
+        for _, row in ranking_display.head(15).iterrows(): 
             st.markdown(f"""
                 <div class="rank-item" style="padding:5px; margin-bottom:5px; border-radius:10px;">
                     <span style="font-weight:600; font-size:0.7rem;">{row['ID_MPIO']}</span>
                 </div>
             """, unsafe_allow_html=True)
 
-    # --- LEADERBOARD ---
     st.markdown("---")
     c_rank, c_trend = st.columns([1, 1.5])
     
@@ -448,28 +432,22 @@ def view_busqueda():
         else:
             st.dataframe(df.tail(100), use_container_width=True, hide_index=True)
 
-# --- 7. EJECUCIÓN PRINCIPAL ---
 if __name__ == "__main__":
     apply_custom_styles()
-    
     if check_auth():
         usuario = st.session_state.user_name
         es_admin = usuario.lower() in USUARIOS_ADMIN and not st.session_state.get("is_guest", False)
-
         st.sidebar.markdown(f"""
             <div style='background:#F1F5F9; padding:20px; border-radius:18px; margin-bottom:20px;'>
                 <p style='margin:0; font-size:0.75rem; font-weight:700; color:#64748B;'>SESIÓN ACTIVA</p>
                 <p style='margin:0; font-size:1.1rem; font-weight:800; color:#0F172A;'>{usuario.upper()}</p>
             </div>
         """, unsafe_allow_html=True)
-        
         opciones = ["📝 Registro", "📊 Estadísticas", "🔍 Búsqueda"] if es_admin else ["📝 Registro"]
         opcion = st.sidebar.radio("MENÚ PRINCIPAL", opciones)
-        
         if st.sidebar.button("Cerrar Sesión"):
             st.session_state.clear()
             st.rerun()
-
         if opcion == "📝 Registro": view_registro()
         elif opcion == "📊 Estadísticas": view_estadisticas()
         elif opcion == "🔍 Búsqueda": view_busqueda()
