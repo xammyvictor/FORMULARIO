@@ -292,7 +292,7 @@ if check_auth():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- MAPA RECONSTRUIDO CON LOGICA DE FILTRADO ROBUSTA ---
+            # --- MAPA RECONSTRUIDO CON URL ESPECÍFICA DEL VALLE ---
             st.subheader("📍 Mapa de Calor y Concentración Territorial")
             
             m_df = df.copy()
@@ -306,57 +306,35 @@ if check_auth():
                 map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots"], horizontal=True)
                 
                 try:
-                    # URL nacional verificada
-                    url_geojson = "https://raw.githubusercontent.com/marcovega/colombia-json/master/colombia.min.json"
-                    response = requests.get(url_geojson, timeout=10)
-                    data_full = response.json()
+                    # Usamos una URL de respaldo que es exclusiva del Valle del Cauca para evitar errores de filtrado
+                    url_valle = "https://raw.githubusercontent.com/jsgonzalez66/D3-Quickstart/master/data/valle-del-cauca.json"
+                    response = requests.get(url_valle, timeout=10)
+                    valle_geojson = response.json()
                     
-                    # Verificación de estructura del JSON
-                    if isinstance(data_full, list):
-                        features_list = data_full
-                    elif isinstance(data_full, dict) and 'features' in data_full:
-                        features_list = data_full['features']
+                    if map_mode == "Coropleta Territorial":
+                        fig = px.choropleth(
+                            map_data, 
+                            geojson=valle_geojson, 
+                            locations='Municipio',
+                            featureidkey="properties.name", # Llave oficial para este archivo GeoJSON
+                            color='Registros',
+                            color_continuous_scale="YlOrRd",
+                            template="plotly_white",
+                            labels={'Registros': 'Total'}
+                        )
                     else:
-                        features_list = []
+                        fig = px.choropleth(
+                            map_data, geojson=valle_geojson, locations='Municipio',
+                            featureidkey="properties.name", color='Registros',
+                            color_continuous_scale="Reds", template="plotly_white"
+                        )
+                        fig.update_traces(marker_line_width=0.5, marker_line_color="white")
 
-                    # FILTRADO ROBUSTO (Ignora mayúsculas/minúsculas en el nombre del departamento)
-                    valle_features = [
-                        f for f in features_list 
-                        if isinstance(f, dict) and str(f.get('properties', {}).get('DPTO_CNMBRE')).upper() == 'VALLE DEL CAUCA'
-                    ]
-                    
-                    if not valle_features:
-                        st.warning("No se encontraron datos geográficos para el Valle del Cauca.")
-                    else:
-                        valle_geojson = {
-                            "type": "FeatureCollection",
-                            "features": valle_features
-                        }
-                        
-                        if map_mode == "Coropleta Territorial":
-                            fig = px.choropleth(
-                                map_data, 
-                                geojson=valle_geojson, 
-                                locations='Municipio',
-                                featureidkey="properties.MPIO_CNMBRE", 
-                                color='Registros',
-                                color_continuous_scale="YlOrRd",
-                                template="plotly_white",
-                                labels={'Registros': 'Registros'}
-                            )
-                        else:
-                            fig = px.choropleth(
-                                map_data, geojson=valle_geojson, locations='Municipio',
-                                featureidkey="properties.MPIO_CNMBRE", color='Registros',
-                                color_continuous_scale="Reds", template="plotly_white"
-                            )
-                            fig.update_traces(marker_line_width=0.5, marker_line_color="white")
-
-                        fig.update_geos(fitbounds="locations", visible=False)
-                        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
-                        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                    fig.update_geos(fitbounds="locations", visible=False)
+                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
+                    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 except Exception as e:
-                    st.error(f"Error procesando el mapa: {e}")
+                    st.error(f"Error cargando mapa: {e}")
 
             with c_map_stats:
                 st.markdown("<div style='padding-top: 50px;'></div>", unsafe_allow_html=True)
