@@ -3,11 +3,12 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import time
-import pydeck as pdk
+import plotly.express as px
 from datetime import datetime, timedelta
-import json
+import requests
 
 # --- CONFIGURACIÓN GENERAL ---
+BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
 META_REGISTROS = 12000
 
 st.set_page_config(
@@ -17,98 +18,85 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- SISTEMA DE DISEÑO PULSE ---
+# --- SISTEMA DE DISEÑO PULSE (CSS) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    
     :root {
         --pulse-pink: #E91E63;
         --pulse-dark: #0F172A;
         --pulse-slate: #64748B;
         --pulse-bg: #F8FAFC;
     }
+
     * { font-family: 'Plus Jakarta Sans', sans-serif; }
     .stApp { background-color: var(--pulse-bg); }
-    
-    .pulse-card {
-        background: white; padding: 24px; border-radius: 24px;
-        border: 1px solid #F1F5F9; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
-        margin-bottom: 20px;
+
+    .pulse-hero {
+        background: var(--pulse-dark);
+        color: white;
+        padding: 40px;
+        border-radius: 32px;
+        margin-bottom: 35px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
     }
-    .pulse-label { color: var(--pulse-slate); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
-    .pulse-value { color: var(--pulse-dark); font-size: 2.2rem; font-weight: 800; margin: 8px 0; line-height: 1; }
-    
-    .hero-section {
-        background: var(--pulse-dark); color: white; padding: 40px;
-        border-radius: 32px; margin-bottom: 35px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-    }
-    .hero-big-num { font-size: 4rem; font-weight: 800; color: white !important; line-height: 1; }
+    .hero-value { font-size: 4rem; font-weight: 800; line-height: 1; color: white !important; }
     .hero-perc { font-size: 2.5rem; font-weight: 800; color: var(--pulse-pink); }
     
-    .progress-track { background: rgba(255, 255, 255, 0.1); height: 16px; border-radius: 20px; width: 100%; margin-top: 25px; overflow: hidden; }
-    .progress-fill { background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%); height: 100%; border-radius: 20px; transition: width 1.5s ease; }
-    
-    .rank-item {
-        display: flex; justify-content: space-between; align-items: center;
-        padding: 16px; background: white; border-radius: 18px; margin-bottom: 10px; border: 1px solid #F1F5F9;
+    .pulse-progress-track {
+        background: rgba(255, 255, 255, 0.1);
+        height: 16px;
+        border-radius: 20px;
+        margin-top: 25px;
+        overflow: hidden;
     }
-    .rank-num { width: 32px; height: 32px; background: #FCE4EC; color: var(--pulse-pink); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.8rem; margin-right: 12px; }
-    .rank-name { font-weight: 700; color: #1E293B; font-size: 0.95rem; }
-    .rank-badge { background: #F8FAFC; color: #64748B; padding: 6px 14px; border-radius: 12px; font-weight: 700; font-size: 0.8rem; border: 1px solid #E2E8F0; }
-    
-    .stButton>button { border-radius: 14px !important; background: var(--pulse-pink) !important; font-weight: 700 !important; color: white !important; border: none !important; width: 100%; height: 3.5rem; }
+    .pulse-progress-fill {
+        background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%);
+        height: 100%;
+        transition: width 1.5s ease-in-out;
+    }
+
+    .pulse-kpi-card {
+        background: white;
+        padding: 24px;
+        border-radius: 24px;
+        border: 1px solid #F1F5F9;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+    }
+    .kpi-label { color: var(--pulse-slate); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; }
+    .kpi-val { color: var(--pulse-dark); font-size: 2.4rem; font-weight: 800; }
+
+    .rank-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px;
+        background: white;
+        border-radius: 18px;
+        margin-bottom: 10px;
+        border: 1px solid #F1F5F9;
+    }
+    .hotspot-pill {
+        padding: 4px 12px;
+        background: #FCE4EC;
+        color: #E91E63;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
     </style>
     """, unsafe_allow_html=True)
-
-# --- BASE DE DATOS DE COORDENADAS ---
-def get_municipality_coords():
-    return {
-        "SANTIAGO DE CALI": {"lat": 3.4516, "lon": -76.5320},
-        "GUADALAJARA DE BUGA": {"lat": 3.9009, "lon": -76.3008},
-        "PALMIRA": {"lat": 3.5394, "lon": -76.3036},
-        "TULUÁ": {"lat": 4.0847, "lon": -76.1954},
-        "JAMUNDÍ": {"lat": 3.2612, "lon": -76.5350},
-        "CARTAGO": {"lat": 4.7464, "lon": -75.9117},
-        "YUMBO": {"lat": 3.6412, "lon": -76.4912},
-        "BUENAVENTURA": {"lat": 3.8801, "lon": -77.0312},
-        "ZARZAL": {"lat": 4.3912, "lon": -76.0712},
-        "ROLDANILLO": {"lat": 4.4112, "lon": -76.1512},
-        "FLORIDA": {"lat": 3.3212, "lon": -76.2312},
-        "CANDELARIA": {"lat": 3.4112, "lon": -76.3512},
-        "PRADERA": {"lat": 3.4212, "lon": -76.2412},
-        "EL CERRITO": {"lat": 3.6812, "lon": -76.3112},
-        "GINEBRA": {"lat": 3.7212, "lon": -76.2612},
-        "GUACARÍ": {"lat": 3.7612, "lon": -76.3312}
-    }
-
-# --- SILUETA DEL VALLE DEL CAUCA (FONDO) ---
-def get_valle_boundary():
-    # Coordenadas simplificadas para dibujar el contorno del departamento como fondo
-    return {
-        "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "geometry": {
-                    "type": "Polygon",
-                    "coordinates": [[
-                        [-77.5, 3.0], [-77.0, 3.2], [-76.8, 3.0], [-76.4, 3.0], 
-                        [-75.8, 4.0], [-75.7, 5.0], [-76.2, 5.1], [-76.5, 4.8], 
-                        [-77.6, 4.2], [-77.5, 3.0]
-                    ]]
-                },
-                "properties": {"name": "Valle del Cauca"}
-            }
-        ]
-    }
 
 # --- CONEXIÓN GOOGLE SHEETS ---
 @st.cache_resource
 def get_google_sheet_client():
     try:
         if "gcp_service_account" not in st.secrets: return None
-        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], 
-                scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+        creds = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"], 
+            scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        )
         return gspread.authorize(creds)
     except: return None
 
@@ -138,6 +126,7 @@ def save_data(data_dict):
         return True
     except: return False
 
+# --- NORMALIZACIÓN PARA EL MAPA ---
 def normalizar_para_mapa(muni):
     m = str(muni).upper().strip()
     mapping = {
@@ -147,61 +136,51 @@ def normalizar_para_mapa(muni):
         "TULUA": "TULUÁ",
         "GUACARI": "GUACARÍ",
         "DARIEN": "CALIMA",
-        "PALMIRA": "PALMIRA",
-        "CARTAGO": "CARTAGO",
-        "YUMBO": "YUMBO",
-        "ROLDANILLO": "ROLDANILLO",
-        "ZARZAL": "ZARZAL",
-        "BUENAVENTURA": "BUENAVENTURA",
-        "FLORIDA": "FLORIDA",
-        "CANDELARIA": "CANDELARIA"
+        "CALIMA": "CALIMA",
+        "LA UNION": "LA UNIÓN",
+        "ANDALUCIA": "ANDALUCÍA",
     }
     return mapping.get(m, m)
 
-# --- AUTH ---
+# --- SISTEMA DE AUTENTICACIÓN ---
 def check_auth():
     if "logged_in" not in st.session_state: st.session_state.logged_in = False
-    params = st.query_params
-    if "ref" in params and "ref_checked" not in st.session_state:
-        st.session_state.logged_in = True
-        st.session_state.user_name = params["ref"]
-        st.session_state.is_guest = True
-        st.session_state.ref_checked = True
-
     if not st.session_state.logged_in:
-        st.markdown("<div style='text-align:center; padding-top: 100px;'><h1>Pulse Login</h1><p>Gestión Maria Irma</p></div>", unsafe_allow_html=True)
-        col1, col2, col3 = st.columns([1, 1.2, 1])
+        st.markdown("<div style='text-align:center; padding-top: 80px;'><h1>Pulse Analytics</h1><p>Gestión Maria Irma</p></div>", unsafe_allow_html=True)
+        col1, col2, col3 = st.columns([1, 1.4, 1])
         with col2:
             u = st.text_input("Usuario")
             p = st.text_input("Contraseña", type="password")
-            if st.button("Entrar"):
+            if st.button("Acceder al Panel"):
                 creds = {"fabian": "1234", "xammy": "1234", "brayan": "1234", "diegomonta": "1234"}
                 if u.lower() in creds and creds[u.lower()] == p:
                     st.session_state.logged_in = True
                     st.session_state.user_name = u.lower()
-                    st.session_state.is_guest = False
                     st.rerun()
-                else: st.error("Acceso denegado")
+                else: st.error("Acceso Denegado")
         return False
     return True
 
-if "f_reset" not in st.session_state: st.session_state.f_reset = 0
-
-# --- DASHBOARD ---
+# --- LÓGICA PRINCIPAL ---
 if check_auth():
     usuario = st.session_state.user_name
-    es_admin = usuario.lower() in ["fabian", "xammy", "brayan"] and not st.session_state.get("is_guest", False)
-
-    st.sidebar.markdown(f"<div style='background:#FCE4EC; padding:20px; border-radius:18px; color:#E91E63; font-weight:800; text-align:center;'>⚡ PULSE | {usuario.upper()}</div>", unsafe_allow_html=True)
-    opcion = st.sidebar.radio("MENÚ", ["📝 Registro", "📊 Estadísticas", "🔍 Búsqueda"] if es_admin else ["📝 Registro"])
+    es_admin = usuario.lower() in ["fabian", "xammy", "brayan"]
     
-    if st.sidebar.button("Cerrar Sesión"):
+    st.sidebar.markdown(f"<div style='background:#F1F5F9; padding:20px; border-radius:18px; margin-bottom:20px;'><p style='margin:0; font-size:0.75rem; font-weight:700; color:#64748B;'>SESIÓN PULSE</p><p style='margin:0; font-size:1.1rem; font-weight:800; color:#0F172A;'>{usuario.upper()}</p></div>", unsafe_allow_html=True)
+    
+    opciones = ["📝 Registro", "📊 Estadísticas", "🔍 Búsqueda"] if es_admin else ["📝 Registro"]
+    opcion = st.sidebar.radio("MENÚ PRINCIPAL", opciones)
+
+    if st.sidebar.button("Salir"):
         st.session_state.clear()
         st.rerun()
 
+    # --- VISTA: REGISTRO ---
     if opcion == "📝 Registro":
         st.title("🗳️ Nuevo Registro")
-        with st.form(key=f"form_pulse_{st.session_state.f_reset}", clear_on_submit=False):
+        if "f_reset" not in st.session_state: st.session_state.f_reset = 0
+        
+        with st.form(key=f"form_pulse_{st.session_state.f_reset}"):
             c1, c2 = st.columns(2)
             with c1:
                 nom = st.text_input("Nombre Completo")
@@ -209,129 +188,100 @@ if check_auth():
                 tel = st.text_input("Teléfono")
             with c2:
                 ocu = st.text_input("Ocupación")
-                dire = st.text_input("Dirección")
+                dir = st.text_input("Dirección")
                 bar = st.text_input("Barrio")
             ciu = st.text_input("Municipio", value="BUGA")
-            pue = st.text_input("Puesto Votación (Opcional)")
+            pue = st.text_input("Puesto (Opcional)")
             
             if st.form_submit_button("GUARDAR REGISTRO"):
                 if nom and ced and tel:
-                    if save_data({"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dire.upper(),"barrio":bar.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}):
-                        st.success("✅ ¡Registro guardado exitosamente!")
-                        st.session_state.f_reset += 1 
+                    payload = {"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dir.upper(),"barrio":bar.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}
+                    if save_data(payload):
+                        st.success("¡Registro guardado exitosamente!")
+                        st.session_state.f_reset += 1
                         time.sleep(1)
                         st.rerun()
-                else: st.warning("Nombre, Cédula y Teléfono obligatorios")
+                else: st.warning("Por favor complete Nombre, Cédula y Teléfono")
 
+    # --- VISTA: ESTADÍSTICAS ---
     elif opcion == "📊 Estadísticas":
         df = get_data()
         if not df.empty:
             st.title("Pulse Analytics | Valle del Cauca")
             
-            # --- HERO PROGRESO ---
+            # Hero Metrics
             total = len(df)
             perc = min((total / META_REGISTROS) * 100, 100)
             st.markdown(f"""
-                <div class="hero-section">
+                <div class="pulse-hero">
                     <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                        <div><p style="margin:0; font-weight:700; opacity:0.6; font-size:0.8rem;">GESTIÓN GLOBAL</p><h1 class="hero-big-num">{total:,}</h1></div>
-                        <div style="text-align:right;"><span class="hero-perc">{perc:.1f}%</span><p style="margin:0; opacity:0.6; font-size:0.8rem;">Meta: {META_REGISTROS:,}</p></div>
+                        <div>
+                            <p style="font-size: 0.8rem; font-weight: 700; opacity: 0.6; letter-spacing: 0.1em; text-transform: uppercase;">Progreso Global</p>
+                            <h1 class="hero-value">{total:,}</h1>
+                        </div>
+                        <div style="text-align:right;">
+                            <span class="hero-perc">{perc:.1f}%</span>
+                            <p style="margin:0; opacity:0.6; font-size:0.8rem;">Meta: {META_REGISTROS:,}</p>
+                        </div>
                     </div>
-                    <div class="progress-track"><div class="progress-fill" style="width: {perc}%;"></div></div>
+                    <div class="pulse-progress-track"><div class="pulse-progress-fill" style="width: {perc}%;"></div></div>
                 </div>
             """, unsafe_allow_html=True)
 
-            # --- KPIs ---
+            # KPIs
             k1, k2, k3, k4 = st.columns(4)
-            v_hoy = len(df[df['Fecha Registro'].dt.date == datetime.now().date()])
-            for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("Municipios", df['Ciudad'].nunique()), ("Líderes", df['Registrado Por'].nunique()), ("Objetivo", META_REGISTROS)]):
-                col.markdown(f"""<div class="pulse-card"><div class="pulse-label">{lab}</div><div class="pulse-value">{val:,}</div></div>""", unsafe_allow_html=True)
-
-            # --- MAPA DE BURBUJAS CON FONDO TERRITORIAL ---
-            st.markdown("<br>", unsafe_allow_html=True)
-            c_map, c_rank = st.columns([1.6, 1])
+            hoy = datetime.now().date()
+            v_hoy = len(df[df['Fecha Registro'].dt.date == hoy])
             
+            for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("Total", total), ("Municipios", df['Ciudad'].nunique()), ("Líderes", df['Registrado Por'].nunique())]):
+                col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
+
+            # --- SECCIÓN MAPA OPTIMIZADO ---
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.subheader("📍 Concentración Territorial")
+            
+            m_df = df.copy()
+            m_df['Municipio_Map'] = m_df['Ciudad'].apply(normalizar_para_mapa)
+            map_counts = m_df.groupby('Municipio_Map').size().reset_index(name='Registros')
+
+            c_map, c_list = st.columns([2, 1])
+
             with c_map:
-                st.subheader("📍 Mapa de Concentración")
-                
-                # 1. Preparar datos de burbujas
-                m_df = df.copy()
-                m_df['M_Map'] = m_df['Ciudad'].apply(normalizar_para_mapa)
-                counts = m_df['M_Map'].value_counts().reset_index()
-                counts.columns = ['municipio', 'registros']
-                coords = get_municipality_coords()
-                counts['lat'] = counts['municipio'].map(lambda x: coords.get(x, {}).get('lat', 3.8))
-                counts['lon'] = counts['municipio'].map(lambda x: coords.get(x, {}).get('lon', -76.5))
-                
-                # 2. Capa de Fondo (Silueta del Valle)
-                valle_geojson = get_valle_boundary()
-                background_layer = pdk.Layer(
-                    "GeoJsonLayer",
-                    valle_geojson,
-                    opacity=0.1,
-                    stroked=True,
-                    filled=True,
-                    get_fill_color=[15, 23, 42], # Pulse Dark
-                    get_line_color=[15, 23, 42],
-                    line_width_min_pixels=2
-                )
+                try:
+                    # GeoJSON optimizado para el Valle del Cauca
+                    url_geo = "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json"
+                    
+                    fig = px.choropleth(
+                        map_counts, geojson=url_geo, locations='Municipio_Map',
+                        featureidkey="properties.name",
+                        color='Registros',
+                        color_continuous_scale=[[0, '#FCE4EC'], [0.5, '#F06292'], [1, '#E91E63']],
+                        template="plotly_white"
+                    )
+                    fig.update_geos(fitbounds="locations", visible=False)
+                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=500, paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+                except:
+                    st.error("Error al cargar el mapa. Verifique la conexión.")
 
-                # 3. Capa de Burbujas
-                bubble_layer = pdk.Layer(
-                    "ScatterplotLayer",
-                    counts,
-                    get_position=["lon", "lat"],
-                    get_color=[233, 30, 99, 180], # Pulse Pink
-                    get_radius="registros * 150 + 2000", # Tamaño exagerado para visibilidad
-                    pickable=True,
-                    opacity=0.8,
-                    stroked=True,
-                    radius_min_pixels=8,
-                    radius_max_pixels=80,
-                    get_line_color=[255, 255, 255]
-                )
-
-                # 4. Renderizado
-                view_state = pdk.ViewState(latitude=3.8, longitude=-76.5, zoom=7.5, pitch=0)
-                
-                st.pydeck_chart(pdk.Deck(
-                    layers=[background_layer, bubble_layer],
-                    initial_view_state=view_state,
-                    map_style="light", # Usamos un estilo de sistema para mayor fiabilidad
-                    tooltip={
-                        "html": "<b>Municipio:</b> {municipio}<br/><b>Registros:</b> {registros}",
-                        "style": {"color": "white", "font-family": "Plus Jakarta Sans"}
-                    }
-                ))
-
-            with c_rank:
-                st.subheader("🏆 TOP Líderes")
-                ranking = df['Registrado Por'].value_counts().reset_index()
-                ranking.columns = ['Líder', 'Total']
-                for i, row in ranking.head(10).iterrows():
+            with c_list:
+                st.write("**Top Municipios**")
+                for _, row in map_counts.sort_values('Registros', ascending=False).head(6).iterrows():
                     st.markdown(f"""
                         <div class="rank-item">
-                            <div class="rank-info"><div class="rank-num">{i+1}</div><span class="rank-name">{row['Líder'].upper()}</span></div>
-                            <span class="rank-badge">{row['Total']} regs</span>
+                            <span style="font-weight:700;">{row['Municipio_Map']}</span>
+                            <span class="hotspot-pill">{row['Registros']} regs</span>
                         </div>
                     """, unsafe_allow_html=True)
 
-            # --- TENDENCIA ---
-            st.markdown("---")
-            st.subheader("📈 Actividad Diaria")
-            trend = df.groupby(df['Fecha Registro'].dt.date).size().reset_index(name='Ingresos')
-            fig_t = px.area(trend, x='Fecha Registro', y='Ingresos', color_discrete_sequence=['#E91E63'])
-            fig_t.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=300, xaxis_title=None, yaxis_title=None)
-            st.plotly_chart(fig_t, use_container_width=True)
-
+    # --- VISTA: BÚSQUEDA ---
     elif opcion == "🔍 Búsqueda":
-        st.title("🔍 Explorador de Registros")
+        st.title("🔍 Explorador de Datos")
         df = get_data()
         if not df.empty:
-            q = st.text_input("Buscar...").upper()
-            if q:
-                res = df[df.astype(str).apply(lambda x: q in x.values, axis=1)]
-                st.dataframe(res, use_container_width=True)
+            busqueda = st.text_input("Buscar por Nombre, Cédula o Municipio").upper()
+            if busqueda:
+                resultado = df[df.astype(str).apply(lambda x: busqueda in x.values, axis=1)]
+                st.dataframe(resultado, use_container_width=True)
             else:
-                st.dataframe(df.tail(100), use_container_width=True)
-                
+                st.dataframe(df.tail(50), use_container_width=True)
