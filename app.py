@@ -26,22 +26,23 @@ st.set_page_config(
 
 # --- 2. FUNCIONES DE NORMALIZACIÓN ---
 def normalizar(texto):
-    """Limpia el texto de tildes, espacios y lo pasa a mayúsculas."""
+    """Limpia el texto de tildes, espacios y lo pasa a mayúsculas de forma estricta."""
     if not texto: return ""
     texto = str(texto).upper().strip()
     texto = unicodedata.normalize("NFD", texto)
     texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
-    # Limpia espacios dobles que puedan venir de la base de datos
     return " ".join(texto.split())
 
 def normalizar_para_mapa(muni):
-    """Mapea nombres de entrada a la identificación oficial del DANE en el GeoJSON."""
+    """Mapea nombres de entrada a la identificación oficial del GeoJSON DANE."""
     m = normalizar(muni)
+    
+    # CASO ESPECIAL CALI: Forzamos la coincidencia
+    if m == "CALI" or "SANTIAGO DE CALI" in m:
+        return "SANTIAGO DE CALI"
+    
     mapping = {
-        "CALI": "SANTIAGO DE CALI",
-        "SANTIAGO DE CALI": "SANTIAGO DE CALI",
         "BUGA": "GUADALAJARA DE BUGA",
-        "GUADALAJARA DE BUGA": "GUADALAJARA DE BUGA",
         "JAMUNDI": "JAMUNDI",
         "TULUA": "TULUA",
         "GUACARI": "GUACARI",
@@ -63,23 +64,7 @@ def normalizar_para_mapa(muni):
         "RESTREPO": "RESTREPO",
         "ROLDANILLO": "ROLDANILLO",
         "SEVILLA": "SEVILLA",
-        "ZARZAL": "ZARZAL",
-        "EL DOVIO": "EL DOVIO",
-        "LA VICTORIA": "LA VICTORIA",
-        "OBANDO": "OBANDO",
-        "ANSERMANUEVO": "ANSERMANUEVO",
-        "ARGELIA": "ARGELIA",
-        "BOLIVAR": "BOLIVAR",
-        "EL CAIRO": "EL CAIRO",
-        "EL AGUILA": "EL AGUILA",
-        "LA CUMBRE": "LA CUMBRE",
-        "SAN PEDRO": "SAN PEDRO",
-        "TORO": "TORO",
-        "TRUJILLO": "TRUJILLO",
-        "ULLOA": "ULLOA",
-        "VERSALLES": "VERSALLES",
-        "VIJES": "VIJES",
-        "YOTOCO": "YOTOCO"
+        "ZARZAL": "ZARZAL"
     }
     res = mapping.get(m, m)
     return normalizar(res)
@@ -105,7 +90,6 @@ def apply_custom_styles():
             border-radius: 32px;
             margin-bottom: 35px;
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-            border: 1px solid rgba(255,255,255,0.05);
         }
         .hero-label { font-size: 0.8rem; font-weight: 700; opacity: 0.6; letter-spacing: 0.1em; text-transform: uppercase; }
         .hero-value { font-size: 4rem; font-weight: 800; line-height: 1; margin: 10px 0; color: white !important; }
@@ -123,7 +107,6 @@ def apply_custom_styles():
             background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%);
             height: 100%;
             border-radius: 20px;
-            transition: width 1s ease;
         }
 
         .pulse-kpi-card {
@@ -203,7 +186,7 @@ def save_data(data_dict):
 
 @st.cache_data(ttl=3600)
 def get_valle_geojson(url):
-    """Descarga el GeoJSON completo y filtra el Valle del Cauca en tiempo real."""
+    """Descarga el GeoJSON completo y filtra el Valle del Cauca."""
     raw_url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
     try:
         response = requests.get(raw_url, timeout=15)
@@ -214,8 +197,13 @@ def get_valle_geojson(url):
                 props = feature["properties"]
                 # Código DANE del Valle del Cauca es 76
                 if str(props.get("DPTO_CCDGO")) == "76":
+                    # Limpieza estricta del nombre en el GeoJSON
                     m_name = normalizar(props.get("MPIO_CNMBR", ""))
-                    feature["id"] = m_name
+                    # Casos especiales de nombres en GeoJSON DANE
+                    if m_name == "SANTIAGO DE CALI": 
+                        feature["id"] = "SANTIAGO DE CALI"
+                    else:
+                        feature["id"] = m_name
                     valle_features.append(feature)
             
             if valle_features:
@@ -324,17 +312,17 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA MAXIMIZADO ---
+    # --- MAPA MAXIMIZADO SIN LÍMITES ---
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📍 Visualización Territorial Completa")
+    st.subheader("📍 Visualización Territorial (Cali incluido)")
     
     m_df = df.copy()
-    # Aplicamos el mapeo asegurando que CALI -> SANTIAGO DE CALI
     m_df['ID_MPIO'] = m_df['Ciudad'].apply(normalizar_para_mapa)
     counts = m_df['ID_MPIO'].value_counts().reset_index()
     counts.columns = ['ID_MPIO', 'Registros']
     
-    c_map_view, c_map_stats = st.columns([6, 1])
+    # Proporción para eliminar el efecto de "recuadro" encerrado
+    c_map_view, c_map_stats = st.columns([10, 1])
     
     with c_map_view:
         geojson_data = get_valle_geojson(URL_GITHUB_GEO)
@@ -342,12 +330,13 @@ def view_estadisticas():
             all_features = geojson_data["features"]
             all_ids = [f["id"] for f in all_features]
             
+            # Cálculo de centroides para etiquetas
             lats, lons, names = [], [], []
             for f in all_features:
                 coords = f["geometry"]["coordinates"]
                 if f["geometry"]["type"] == "Polygon":
                     coords_flat = np.array(coords[0])
-                else: # MultiPolygon
+                else: 
                     coords_flat = np.array([c for sub in coords for c in sub[0]])
                 
                 lons.append(coords_flat[:, 0].mean())
@@ -366,21 +355,22 @@ def view_estadisticas():
                 labels={'Registros': 'Total'}
             )
             
-            # Etiquetas más visibles
+            # Etiquetas optimizadas
             fig.add_trace(go.Scattergeo(
                 lat=lats,
                 lon=lons,
                 text=names,
                 mode='text',
-                textfont=dict(size=11, color="black", family="Plus Jakarta Sans", weight="bold"),
+                textfont=dict(size=12, color="black", family="Plus Jakarta Sans", weight="bold"),
                 hoverinfo='none',
                 showlegend=False
             ))
             
-            # Forzamos que el mapa use todo el canvas sin bordes internos
+            # Eliminar recuadro y mapa base
             fig.update_geos(
                 fitbounds="locations",
                 visible=False,
+                showframe=False, # Elimina el recuadro exterior
                 projection_type="mercator"
             )
             
@@ -390,47 +380,39 @@ def view_estadisticas():
                 selector=dict(type='choropleth')
             )
             
-            # Altura al máximo y márgenes a cero absoluto
+            # Ajuste de layout con márgenes cero absoluto
             fig.update_layout(
                 margin={"r":0,"t":0,"l":0,"b":0}, 
                 height=1000,
-                paper_bgcolor="white",
-                plot_bgcolor="white",
+                paper_bgcolor="rgba(0,0,0,0)", # Fondo transparente para integrarse
+                plot_bgcolor="rgba(0,0,0,0)",
                 coloraxis_colorbar=dict(
                     title="REGISTROS", 
-                    thickness=25, 
-                    len=0.5, 
-                    yanchor="middle", 
-                    y=0.5,
-                    xanchor="left",
-                    x=0.02
-                ),
-                autosize=True
+                    thickness=30, 
+                    len=0.6, 
+                    yanchor="middle", y=0.5,
+                    xanchor="left", x=0.01
+                )
             )
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         else:
-            st.error("⚠️ No se pudo cargar el mapa.")
-            st.dataframe(counts, use_container_width=True)
+            st.error("⚠️ Error cargando GeoJSON.")
 
     with c_map_stats:
-        st.write("**🔥 Ranking Municipal**")
-        for _, row in counts.head(20).iterrows(): 
+        st.write("**🔥 Ranking**")
+        for _, row in counts.head(15).iterrows(): 
             st.markdown(f"""
-                <div class="rank-item" style="padding:8px; margin-bottom:6px; border-radius:12px;">
-                    <span style="font-weight:600; font-size:0.75rem;">{row['ID_MPIO']}</span>
-                    <span class="hotspot-pill" style="font-size:0.7rem; padding:2px 8px;">{row['Registros']}</span>
+                <div class="rank-item" style="padding:5px; margin-bottom:5px; border-radius:10px;">
+                    <span style="font-weight:600; font-size:0.7rem;">{row['ID_MPIO']}</span>
                 </div>
             """, unsafe_allow_html=True)
-        
-        st.markdown("---")
-        st.metric("Municipios", f"{len(counts)}/42")
 
     # --- LEADERBOARD ---
     st.markdown("---")
     c_rank, c_trend = st.columns([1, 1.5])
     
     with c_rank:
-        st.subheader("🏆 Leaderboard de Líderes")
+        st.subheader("🏆 Leaderboard")
         ranking = df['Registrado Por'].value_counts().reset_index()
         ranking.columns = ['Líder', 'Total']
         for i, row in ranking.head(8).iterrows():
@@ -455,7 +437,7 @@ def view_busqueda():
     st.title("🔍 Explorador de Registros")
     df = get_data()
     if not df.empty:
-        q = st.text_input("Buscar por nombre, cédula o municipio...").upper()
+        q = st.text_input("Buscar...").upper()
         if q:
             res = df[df.astype(str).apply(lambda x: q in x.str.upper().values, axis=1)]
             st.dataframe(res, use_container_width=True, hide_index=True)
