@@ -318,15 +318,16 @@ if check_auth():
                     if map_mode == "Coropleta Territorial":
                         # Mapa de Calor por regiones (Dibujo limpio)
                         fig = px.choropleth(
-                            map_data, 
-                            geojson=geojson_data, 
-                            locations='Municipio',
-                            featureidkey="properties.NOM_MPIO", 
-                            color='Registros',
-                            color_continuous_scale="YlOrRd", # Amarillo -> Naranja -> Rojo (Intuitivo)
-                            template="plotly_white",
-                            labels={'Registros': 'Total Registros'}
-                        )
+    map_data,
+    geojson=geojson_data,
+    locations="Municipio",
+    featureidkey="properties.NOM_MPIO",
+    color="Registros",
+    color_continuous_scale="YlOrRd",
+    template="plotly_white",
+    labels={"Registros": "Total Registros"}
+)
+
                     else:
                         # Mapa de Burbujas / Hotspots sobre el dibujo
                         # Calculamos centroides aproximados o simplemente usamos el dibujo como base
