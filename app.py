@@ -356,10 +356,8 @@ if check_auth():
                                 template="plotly_white"
                             )
                             fig.update_traces(marker_line_width=0.5, marker_line_color="white")
-                            
+                     
                         else:
-                            # Mapa de Burbujas / Hotspots sobre el dibujo
-                            # Calculamos centroides aproximados o simplemente usamos el dibujo como base
                             fig = px.choropleth(
                                 map_data, geojson=geojson_data, locations='Municipio',
                                 featureidkey="properties.MPIO_CNMBR", color='Registros',
