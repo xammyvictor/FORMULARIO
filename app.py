@@ -24,17 +24,19 @@ st.set_page_config(
 
 # --- 2. FUNCIONES DE NORMALIZACIÓN ---
 def normalizar(texto):
-    """Limpia el texto de tildes, espacios y lo pasa a mayúsculas."""
+    """Limpia el texto de tildes, espacios y lo pasa a mayúsculas de forma agresiva."""
     if not texto: return ""
     texto = str(texto).upper().strip()
     texto = unicodedata.normalize("NFD", texto)
     texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
+    # Reemplazos específicos para nombres oficiales
+    texto = texto.replace("SANTIAGO DE CALI", "CALI") # Simplificar si es necesario
     return " ".join(texto.split())
 
 def normalizar_para_mapa(muni):
-    """Traduce nombres de la base de datos a nombres oficiales del GeoJSON."""
+    """Mapea nombres de entrada a la identificación única del GeoJSON."""
     m = normalizar(muni)
-    # Diccionario completo para los 42 municipios del Valle
+    # Diccionario de traducción para asegurar que BUGA -> GUADALAJARA DE BUGA
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
@@ -42,41 +44,14 @@ def normalizar_para_mapa(muni):
         "TULUA": "TULUA",
         "GUACARI": "GUACARI",
         "DARIEN": "CALIMA",
-        "CALIMA": "CALIMA",
         "LA UNION": "LA UNION",
         "RIOFRIO": "RIOFRIO",
         "ANDALUCIA": "ANDALUCIA",
-        "EL CERRITO": "EL CERRITO",
-        "CARTAGO": "CARTAGO",
-        "PALMIRA": "PALMIRA",
         "YUMBO": "YUMBO",
+        "PALMIRA": "PALMIRA",
         "DAGUA": "DAGUA",
-        "FLORIDA": "FLORIDA",
-        "PRADERA": "PRADERA",
-        "BUENAVENTURA": "BUENAVENTURA",
-        "CAICEDONIA": "CAICEDONIA",
-        "SEVILLA": "SEVILLA",
-        "ZARZAL": "ZARZAL",
-        "ROLDANILLO": "ROLDANILLO",
-        "LA VICTORIA": "LA VICTORIA",
-        "OBANDO": "OBANDO",
-        "ANSERMANUEVO": "ANSERMANUEVO",
-        "ARGELIA": "ARGELIA",
-        "BOLIVAR": "BOLIVAR",
-        "BUGALAGRANDE": "BUGALAGRANDE",
-        "EL CAIRO": "EL CAIRO",
-        "EL DOVIO": "EL DOVIO",
-        "EL AGUILA": "EL AGUILA",
-        "GINEBRA": "GINEBRA",
-        "LA CUMBRE": "LA CUMBRE",
-        "RESTREPO": "RESTREPO",
-        "SAN PEDRO": "SAN PEDRO",
-        "TORO": "TORO",
-        "TRUJILLO": "TRUJILLO",
-        "ULLOA": "ULLOA",
-        "VERSALLES": "VERSALLES",
-        "VIJES": "VIJES",
-        "YOTOCO": "YOTOCO"
+        "CARTAGO": "CARTAGO",
+        "EL CERRITO": "EL CERRITO"
     }
     return mapping.get(m, m)
 
@@ -94,7 +69,6 @@ def apply_custom_styles():
         * { font-family: 'Plus Jakarta Sans', sans-serif; }
         .stApp { background-color: var(--pulse-bg); }
         
-        /* Dashboard Cards */
         .pulse-hero {
             background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
             color: white;
@@ -102,6 +76,7 @@ def apply_custom_styles():
             border-radius: 32px;
             margin-bottom: 35px;
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255,255,255,0.05);
         }
         .hero-label { font-size: 0.8rem; font-weight: 700; opacity: 0.6; letter-spacing: 0.1em; text-transform: uppercase; }
         .hero-value { font-size: 4rem; font-weight: 800; line-height: 1; margin: 10px 0; color: white !important; }
@@ -109,7 +84,7 @@ def apply_custom_styles():
         
         .pulse-progress-track {
             background: rgba(255, 255, 255, 0.1);
-            height: 12px;
+            height: 14px;
             border-radius: 20px;
             width: 100%;
             margin-top: 25px;
@@ -196,28 +171,38 @@ def save_data(data_dict):
         return True
     except Exception: return False
 
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=3600)
 def get_valle_geojson():
-    """Descarga y procesa el GeoJSON asegurando IDs compatibles con Mapbox."""
-    url = "https://raw.githubusercontent.com/santiblanko/colombia.geojson/master/mpio.json"
-    try:
-        response = requests.get(url, timeout=15)
-        if response.status_code != 200: return None
-        data = response.json()
-        
-        valle_features = []
-        for feature in data["features"]:
-            props = feature["properties"]
-            # Valle del Cauca (Código 76)
-            if str(props.get("DPTO_CCDGO")) == "76" or normalizar(props.get("DPTO_CNMBR")) == "VALLE DEL CAUCA":
-                m_name = normalizar(props.get("MPIO_CNMBR", ""))
-                # ASIGNAR EL NOMBRE COMO ID DEL FEATURE
-                feature["id"] = m_name
-                valle_features.append(feature)
-        
-        if not valle_features: return None
-        return {"type": "FeatureCollection", "features": valle_features}
-    except Exception: return None
+    """Descarga el GeoJSON con manejo de errores y fuentes alternativas."""
+    # URLs de respaldo
+    urls = [
+        "https://raw.githubusercontent.com/santiblanko/colombia.geojson/master/mpio.json",
+        "https://gist.githubusercontent.com/john-guerra/43c76568237d6f43ad9f/raw/800974fa2e16d4036e7885b51c8906352c803099/colombia.geo.json"
+    ]
+    
+    for url in urls:
+        try:
+            response = requests.get(url, timeout=20)
+            if response.status_code == 200:
+                data = response.json()
+                valle_features = []
+                for feature in data["features"]:
+                    props = feature["properties"]
+                    # Filtrar por departamento (Valle del Cauca = Código 76)
+                    dpto = str(props.get("DPTO_CCDGO", props.get("DPTO", "")))
+                    dpto_nom = normalizar(props.get("DPTO_CNMBR", ""))
+                    
+                    if dpto == "76" or "VALLE" in dpto_nom:
+                        m_name = normalizar(props.get("MPIO_CNMBR", props.get("mpio", "")))
+                        # Asignar ID para el cruce con Plotly Mapbox
+                        feature["id"] = m_name
+                        valle_features.append(feature)
+                
+                if valle_features:
+                    return {"type": "FeatureCollection", "features": valle_features}
+        except Exception:
+            continue
+    return None
 
 # --- 5. LÓGICA DE AUTENTICACIÓN ---
 def check_auth():
@@ -262,7 +247,7 @@ def view_registro():
             ocu = st.text_input("Ocupación")
             dir = st.text_input("Dirección")
             bar = st.text_input("Barrio")
-        ciu = st.text_input("Municipio (Ej: BUGA)", value="BUGA")
+        ciu = st.text_input("Municipio", value="BUGA")
         pue = st.text_input("Puesto (Opcional)")
         
         if st.form_submit_button("GUARDAR REGISTRO"):
@@ -273,17 +258,17 @@ def view_registro():
                     "barrio": bar.upper(), "ciudad": ciu.upper(), "puesto": pue.upper()
                 })
                 if success:
-                    st.success("¡Registro guardado exitosamente!")
+                    st.success("¡Registro guardado con éxito!")
                     st.session_state.f_reset += 1
                     time.sleep(1)
                     st.rerun()
-                else: st.error("Fallo al conectar con la base de datos.")
-            else: st.warning("Por favor complete los campos obligatorios.")
+                else: st.error("Fallo al conectar con Google Sheets.")
+            else: st.warning("Nombre, Cédula y Teléfono obligatorios.")
 
 def view_estadisticas():
     df = get_data()
     if df.empty:
-        st.info("No hay datos registrados aún.")
+        st.info("No hay datos para mostrar.")
         return
 
     st.title("Pulse Analytics | Valle del Cauca")
@@ -315,52 +300,48 @@ def view_estadisticas():
     v_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
 
     k1, k2, k3, k4 = st.columns(4)
-    metricas = [("Hoy", v_hoy), ("Últ. 8 días", v_8d), ("Últ. 30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]
-    for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
+    for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA MAPBOX ---
+    # --- MAPA MAPBOX (ESTILO DARK) ---
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📍 Mapa de Concentración de Ciudadanos")
+    st.subheader("📍 Concentración Territorial de Ciudadanos")
     
     m_df = df.copy()
     m_df['ID_MPIO'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
     map_data = m_df['ID_MPIO'].value_counts().reset_index()
     map_data.columns = ['ID_MPIO', 'Registros']
     
-    c_map_view, c_map_stats = st.columns([2, 1])
+    c_map_view, c_map_stats = st.columns([2.2, 1])
     
     with c_map_view:
         geojson_data = get_valle_geojson()
         if geojson_data:
-            # USAMOS MAPBOX PARA EL LOOK "VERCEL"
             fig = px.choropleth_mapbox(
                 map_data, 
                 geojson=geojson_data, 
                 locations='ID_MPIO',
                 color='Registros',
                 color_continuous_scale="Reds",
-                mapbox_style="carto-darkmatter", # ESTILO OSCURO PROFESIONAL
-                center={"lat": 3.8, "lon": -76.3},
-                zoom=7.5,
-                opacity=0.7,
+                mapbox_style="carto-darkmatter", # ESTILO NEGRO MATE
+                center={"lat": 3.85, "lon": -76.3},
+                zoom=7.8,
+                opacity=0.8,
                 labels={'Registros': 'Total'}
             )
             fig.update_layout(
                 margin={"r":0,"t":0,"l":0,"b":0}, 
                 height=600,
                 paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font_color="white",
-                coloraxis_colorbar=dict(title="DENSIDAD", thickness=20)
+                coloraxis_colorbar=dict(title="DENSIDAD", thickness=15, len=0.5)
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.error("⚠️ Capa geográfica no disponible. Mostrando datos tabulares:")
+            st.error("⚠️ No se pudo cargar el mapa geográfico. Verifica tu conexión o intenta recargar.")
             st.dataframe(map_data, use_container_width=True)
 
     with c_map_stats:
-        st.write("**🔥 Municipios Líderes**")
+        st.write("**🔥 Municipios con más actividad**")
         for _, row in map_data.head(6).iterrows():
             st.markdown(f"""
                 <div class="rank-item" style="padding:12px; margin-bottom:8px;">
@@ -370,8 +351,8 @@ def view_estadisticas():
             """, unsafe_allow_html=True)
         
         st.markdown("---")
-        st.metric("Cobertura Regional", f"{len(map_data)} / {MUNICIPIOS_VALLE_TOTAL}")
-        st.metric("Promedio Regional", f"{int(map_data['Registros'].mean()) if not map_data.empty else 0}")
+        st.metric("Municipios Activos", f"{len(map_data)} / {MUNICIPIOS_VALLE_TOTAL}")
+        st.metric("Media de Gestión", f"{int(map_data['Registros'].mean()) if not map_data.empty else 0}")
 
     # --- LEADERBOARD ---
     st.markdown("---")
