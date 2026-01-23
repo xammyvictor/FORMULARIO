@@ -135,7 +135,7 @@ def save_data(data_dict):
     except: return False
 
 # --- NORMALIZACIÓN DE MUNICIPIOS ---
-def normalizar_muni(muni):
+def normalizar_para_mapa(muni):
     m = str(muni).upper().strip()
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
@@ -150,18 +150,24 @@ def normalizar_muni(muni):
         "YUMBO": "YUMBO",
         "ROLDANILLO": "ROLDANILLO",
         "ZARZAL": "ZARZAL",
-        "BUENAVENTURA": "BUENAVENTURA"
+        "ANDALUCIA": "ANDALUCÍA",
+        "FLORIDA": "FLORIDA",
+        "PRADERA": "PRADERA",
+        "EL CERRITO": "EL CERRITO",
+        "GINEBRA": "GINEBRA",
+        "LA UNION": "LA UNIÓN",
+        "SEVILLA": "SEVILLA",
+        "CAICEDONIA": "CAICEDONIA"
     }
     return mapping.get(m, m)
 
-# --- CARGA DEL DIBUJO DEL MAPA (OPTIMIZADO) ---
+# --- CARGA DEL DIBUJO DEL MAPA ---
 @st.cache_data(ttl=3600)
 def load_valle_geojson():
-    # URL CDN robusta
+    # CDN estable para el dibujo de municipios
     url = "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json"
-    headers = {'User-Agent': 'Mozilla/5.0'} # Necesario para evitar bloqueos de servidores
     try:
-        r = requests.get(url, headers=headers, timeout=15)
+        r = requests.get(url, timeout=15, verify=False)
         if r.status_code == 200:
             return r.json()
     except:
@@ -178,7 +184,7 @@ def check_auth():
         st.session_state.ref_checked = True
 
     if not st.session_state.logged_in:
-        st.markdown("<div style='text-align:center; padding-top: 100px;'><h1>Pulse Analytics</h1></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; padding-top: 100px;'><h1>Pulse Login</h1></div>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 1.2, 1])
         with col2:
             u = st.text_input("Usuario")
@@ -209,6 +215,7 @@ if check_auth():
         st.session_state.clear()
         st.rerun()
 
+    # --- SECCIÓN REGISTRO ---
     if opcion == "📝 Registro":
         st.title("🗳️ Nuevo Registro")
         with st.form(key=f"form_pulse_{st.session_state.f_reset}", clear_on_submit=False):
@@ -233,12 +240,13 @@ if check_auth():
                         st.rerun()
                 else: st.warning("Complete Nombre, Cédula y Teléfono")
 
+    # --- SECCIÓN ESTADÍSTICAS ---
     elif opcion == "📊 Estadísticas":
         df = get_data()
         if not df.empty:
-            st.title("Pulse Analytics | Dashboard Estratégico")
+            st.title("Pulse Analytics | Panel de Gestión")
             
-            # --- META ---
+            # 1. META HERO
             total = len(df)
             perc = min((total / META_REGISTROS) * 100, 100)
             st.markdown(f"""
@@ -257,7 +265,7 @@ if check_auth():
                 </div>
             """, unsafe_allow_html=True)
 
-            # --- KPIs ---
+            # 2. KPIs
             hoy = datetime.now()
             df['F_S'] = df['Fecha Registro'].dt.date
             v_hoy = len(df[df['F_S'] == hoy.date()])
@@ -268,31 +276,31 @@ if check_auth():
             for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
                 col.markdown(f"""<div class="pulse-card"><div class="pulse-label">{lab}</div><div class="pulse-value">{val:,}</div></div>""", unsafe_allow_html=True)
 
-            # --- MAPA Y RANKING ---
+            # 3. MAPA DE COROPLETAS (DIBUJO VECTORIAL)
             st.markdown("<br>", unsafe_allow_html=True)
             c_map, c_rank = st.columns([1.6, 1])
             
             with c_map:
-                st.subheader("🗺️ Mapa de Coropletas - Valle del Cauca")
+                st.subheader("📍 Mapa de Coropletas Territorial")
                 m_df = df.copy()
-                m_df['M_Map'] = m_df['Ciudad'].apply(normalizar_muni)
-                map_data = m_df['M_Map'].value_counts().reset_index()
+                m_df['Municipio_Map'] = m_df['Ciudad'].apply(normalizar_para_mapa)
+                map_data = m_df['Municipio_Map'].value_counts().reset_index()
                 map_data.columns = ['Municipio', 'Registros']
                 
                 geojson = load_valle_geojson()
                 if geojson:
-                    # MAPA DE COROPLETAS (EL DIBUJO REAL)
+                    # Mapa de Coropletas Real
                     fig = px.choropleth(
                         map_data, 
                         geojson=geojson, 
                         locations='Municipio',
-                        featureidkey="properties.name", 
+                        featureidkey="properties.name", # Llave de unión interna
                         color='Registros',
-                        color_continuous_scale="Reds", 
+                        color_continuous_scale="RdPu", 
                         template="plotly_white",
                         hover_name="Municipio"
                     )
-                    # Configuración estricta para ver SOLO el departamento
+                    # Configuramos para ver SOLO el dibujo (silueta)
                     fig.update_geos(
                         fitbounds="locations", 
                         visible=False,
@@ -307,12 +315,11 @@ if check_auth():
                     )
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 else:
-                    st.error("No se pudo descargar el dibujo del Valle del Cauca.")
-                    st.info("Visualizando datos tabulares:")
-                    st.dataframe(map_data, use_container_width=True, hide_index=True)
+                    st.error("Error al cargar el dibujo territorial del Valle del Cauca.")
+                    st.dataframe(map_data, use_container_width=True)
 
             with c_rank:
-                st.subheader("🏆 TOP Líderes")
+                st.subheader("🏆 TOP 10 Líderes")
                 ranking = df['Registrado Por'].value_counts().reset_index()
                 ranking.columns = ['Líder', 'Total']
                 for i, row in ranking.head(10).iterrows():
@@ -326,7 +333,7 @@ if check_auth():
                         </div>
                     """, unsafe_allow_html=True)
 
-            # --- TENDENCIA ---
+            # 4. TENDENCIA
             st.markdown("---")
             st.subheader("📈 Ritmo de Crecimiento")
             trend = df.groupby('F_S').size().reset_index(name='Ingresos')
@@ -335,7 +342,7 @@ if check_auth():
             st.plotly_chart(fig_t, use_container_width=True)
 
     elif opcion == "🔍 Búsqueda":
-        st.title("🔍 Explorador de Registros")
+        st.title("🔍 Buscador de Registros")
         df = get_data()
         if not df.empty:
             q = st.text_input("Buscar por Nombre, Cédula o Ciudad").upper()
