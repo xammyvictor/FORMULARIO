@@ -281,7 +281,7 @@ if check_auth():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- MAPA RECONSTRUIDO CON VERIFICACIÓN DE ESTRUCTURA ---
+            # --- MAPA RECONSTRUIDO CON FILTRADO ROBUSTO ---
             st.subheader("📍 Mapa de Calor y Concentración Territorial")
             
             m_df = df.copy()
@@ -295,15 +295,14 @@ if check_auth():
                 map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots"], horizontal=True)
                 
                 try:
-                    # URL nacional estable
+                    # Usamos una URL de repositorio estable
                     url_geojson = "https://raw.githubusercontent.com/marcovega/colombia-json/master/colombia.min.json"
-                    response = requests.get(url_geojson, timeout=10)
+                    response = requests.get(url_geojson, timeout=15)
                     
                     if response.status_code == 200:
                         data_raw = response.json()
                         
-                        # --- SOLUCIÓN AL ERROR DE ÍNDICES ---
-                        # Verificamos si la respuesta es una lista o un diccionario
+                        # Extraemos features de forma segura
                         if isinstance(data_raw, dict) and 'features' in data_raw:
                             features_source = data_raw['features']
                         elif isinstance(data_raw, list):
@@ -311,24 +310,34 @@ if check_auth():
                         else:
                             features_source = []
 
-                        # Filtramos los municipios del Valle
-                        valle_features = [
-                            f for f in features_source 
-                            if isinstance(f, dict) and f.get('properties', {}).get('DPTO_CNMBRE') == 'VALLE DEL CAUCA'
-                        ]
-                        
-                        valle_geojson = {
-                            "type": "FeatureCollection",
-                            "features": valle_features
-                        }
+                        # FILTRADO FLEXIBLE PARA EL VALLE DEL CAUCA
+                        # Buscamos en las propiedades comunes de los GeoJSON de Colombia
+                        valle_features = []
+                        for f in features_source:
+                            if not isinstance(f, dict): continue
+                            props = f.get('properties', {})
+                            # Comprobamos departamento en llaves comunes (mayúsculas y sin espacios)
+                            dpto_nom = str(props.get('DPTO_CNMBRE') or props.get('NOMBRE_DPT') or props.get('dpto', '')).upper().strip()
+                            if dpto_nom == 'VALLE DEL CAUCA':
+                                valle_features.append(f)
                         
                         if valle_features:
+                            valle_geojson = {
+                                "type": "FeatureCollection",
+                                "features": valle_features
+                            }
+                            
+                            # Identificamos la llave de municipio (MPIO_CNMBRE es estándar en este archivo)
+                            # Intentamos detectar qué llave tiene los nombres de municipios
+                            sample_props = valle_features[0].get('properties', {})
+                            llave_muni = "MPIO_CNMBRE" if "MPIO_CNMBRE" in sample_props else "NOMBRE_MPI"
+
                             if map_mode == "Coropleta Territorial":
                                 fig = px.choropleth(
                                     map_data, 
                                     geojson=valle_geojson, 
                                     locations='Municipio',
-                                    featureidkey="properties.MPIO_CNMBRE", 
+                                    featureidkey=f"properties.{llave_muni}", 
                                     color='Registros',
                                     color_continuous_scale="YlOrRd",
                                     template="plotly_white",
@@ -337,7 +346,7 @@ if check_auth():
                             else:
                                 fig = px.choropleth(
                                     map_data, geojson=valle_geojson, locations='Municipio',
-                                    featureidkey="properties.MPIO_CNMBRE", color='Registros',
+                                    featureidkey=f"properties.{llave_muni}", color='Registros',
                                     color_continuous_scale="Reds", template="plotly_white"
                                 )
                                 fig.update_traces(marker_line_width=0.5, marker_line_color="white")
@@ -346,7 +355,8 @@ if check_auth():
                             fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
                             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                         else:
-                            st.error("No se encontraron geometrías para el Valle del Cauca en este archivo.")
+                            st.error("No se encontraron geometrías para el Valle del Cauca. Verificando estructura...")
+                            # Debug opcional: st.write(features_source[0]['properties'] if features_source else "Sin datos")
                     else:
                         st.warning("⚠️ El servidor de mapas no respondió correctamente.")
                 except Exception as e:
