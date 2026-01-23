@@ -127,17 +127,14 @@ def check_session():
         return False
     return True
 
-# --- INICIALIZACIÓN DE ESTADO DE CAMPOS ---
-campos_form = ["nombre", "cedula", "telefono", "ocupacion", "direccion", "barrio", "ciudad", "puesto"]
-for campo in campos_form:
-    if f"val_{campo}" not in st.session_state:
-        st.session_state[f"val_{campo}"] = "" if campo != "ciudad" else "BUGA"
+# --- INICIALIZACIÓN DE ESTADO ---
+if "form_reset_key" not in st.session_state:
+    st.session_state.form_reset_key = 0
 
 # --- FLUJO PRINCIPAL ---
 if check_session():
     usuario = st.session_state.user_name
     
-    # BARRA LATERAL
     st.sidebar.markdown(f"### 👤 Usuario: **{usuario.capitalize()}**")
     
     USUARIOS_CON_ACCESO_TOTAL = ["fabian", "xammy", "brayan"]
@@ -152,7 +149,6 @@ if check_session():
 
     opcion = st.sidebar.radio("Navegación:", opciones_menu)
     
-    # GENERADOR DE QR
     if not st.session_state.get("is_guest", False):
         with st.sidebar.expander("📱 Generar QR", expanded=False):
             st.write("QR para que otros se registren bajo tu nombre:")
@@ -182,28 +178,27 @@ if check_session():
         if st.session_state.get("is_guest"):
             st.markdown(f'<div class="guest-banner">👋 <b>Modo Invitado:</b> Estás registrando datos para: <b>{usuario.capitalize()}</b></div>', unsafe_allow_html=True)
 
-        # Formulario principal
-        with st.form("registro_form", clear_on_submit=False):
+        # Usamos una "key" dinámica para el formulario. Cuando cambia, el formulario se limpia.
+        with st.form(key=f"registro_form_{st.session_state.form_reset_key}", clear_on_submit=False):
             st.subheader("Información Personal")
             col1, col2 = st.columns(2)
             with col1:
-                in_nombre = st.text_input("Nombre Completo", value=st.session_state.val_nombre)
-                in_cedula = st.text_input("Número de Cédula", value=st.session_state.val_cedula)
-                in_telefono = st.text_input("Número de Teléfono", value=st.session_state.val_telefono)
+                in_nombre = st.text_input("Nombre Completo")
+                in_cedula = st.text_input("Número de Cédula")
+                in_telefono = st.text_input("Número de Teléfono")
             with col2:
-                in_ocupacion = st.text_input("Ocupación", value=st.session_state.val_ocupacion)
-                in_direccion = st.text_input("Dirección", value=st.session_state.val_direccion)
-                in_barrio = st.text_input("Barrio", value=st.session_state.val_barrio)
+                in_ocupacion = st.text_input("Ocupación")
+                in_direccion = st.text_input("Dirección")
+                in_barrio = st.text_input("Barrio")
             
             c_map1, c_map2 = st.columns(2)
-            in_ciudad = c_map1.text_input("Ciudad", value=st.session_state.val_ciudad)
-            in_puesto = c_map2.text_input("Puesto de Votación (Opcional)", value=st.session_state.val_puesto)
+            in_ciudad = c_map1.text_input("Ciudad", value="BUGA")
+            in_puesto = c_map2.text_input("Puesto de Votación (Opcional)")
             
             st.markdown("---")
             enviar = st.form_submit_button("✅ Guardar Registro")
 
             if enviar:
-                # Validaciones previas
                 errores = []
                 if not all([in_nombre.strip(), in_cedula.strip(), in_telefono.strip(), in_ocupacion.strip(), 
                             in_direccion.strip(), in_barrio.strip(), in_ciudad.strip()]):
@@ -225,22 +220,20 @@ if check_session():
                         "ciudad": in_ciudad.strip().upper(), "puesto": in_puesto.strip().upper()
                     }
                     
-                    with st.spinner("Procesando registro..."):
+                    with st.spinner("Guardando en la base de datos..."):
                         if save_to_drive(data):
-                            # ÉXITO: Limpiamos el estado solo aquí
-                            st.success(f"✅ ¡Registro de {in_nombre.upper()} guardado exitosamente!")
+                            # ÉXITO: Mostramos mensaje y incrementamos la llave para limpiar
+                            st.success(f"✅ ¡Registro de {in_nombre.upper()} guardado!")
                             
-                            # Resetear variables en session_state
-                            for campo in campos_form:
-                                st.session_state[f"val_{campo}"] = "" if campo != "ciudad" else "BUGA"
+                            # Incrementamos el contador de la llave para "destruir" el formulario viejo y crear uno nuevo vacío
+                            st.session_state.form_reset_key += 1
                             
-                            # Esperar un momento para que el usuario vea el mensaje y reiniciar
-                            time.sleep(1.5)
+                            time.sleep(2)
                             st.rerun()
                         else:
-                            st.error("Hubo un problema al guardar. Por favor intente nuevamente.")
+                            st.error("No se pudo guardar el registro. Intente de nuevo.")
 
-    # --- SECCIÓN 2: BÚSQUEDA (Restringido) ---
+    # --- SECCIÓN 2: BÚSQUEDA ---
     elif opcion == "🔍 Búsqueda Rápida" and es_admin:
         st.title("🔍 Consulta de Base de Datos")
         df = get_all_data()
@@ -250,23 +243,22 @@ if check_session():
                 mask = df.astype(str).apply(lambda row: row.str.contains(busqueda, case=False).any(), axis=1)
                 st.dataframe(df[mask], use_container_width=True)
             else:
-                st.info("Mostrando últimos 15 registros:")
+                st.info("Mostrando registros recientes:")
                 st.dataframe(df.tail(15), use_container_width=True)
-        else: st.warning("No hay datos disponibles en la hoja de cálculo.")
+        else: st.warning("Base de datos vacía o no conectada.")
 
-    # --- SECCIÓN 3: ESTADÍSTICAS (Restringido) ---
+    # --- SECCIÓN 3: ESTADÍSTICAS ---
     elif opcion == "📊 Estadísticas" and es_admin:
         st.title("📊 Análisis de Gestión")
         df = get_all_data()
         if not df.empty:
-            # Identificar columnas dinámicamente por posición si los nombres varían
             col_nombre = df.columns[2] if len(df.columns) > 2 else "Nombre"
-            col_lider = df.columns[1] if len(df.columns) > 1 else "Registrado Por"
+            col_lider = df.columns[1] if len(df.columns) > 1 else "Registrador Por"
             col_ciudad = "Ciudad" if "Ciudad" in df.columns else df.columns[-2]
 
             m1, m2, m3 = st.columns(3)
             m1.metric("Total Registrados", len(df))
-            m2.metric("Ciudades Cubiertas", df[col_ciudad].nunique() if col_ciudad in df.columns else 0)
+            m2.metric("Ciudades", df[col_ciudad].nunique() if col_ciudad in df.columns else 0)
             m3.metric("Último Registro", str(df.iloc[-1][col_nombre])[:20])
 
             c1, c2 = st.columns(2)
@@ -281,9 +273,8 @@ if check_session():
                     counts.columns = ['Líder', 'Registros']
                     st.plotly_chart(px.bar(counts, x='Líder', y='Registros', color_discrete_sequence=['#D81B60']), use_container_width=True)
 
-            # --- MAPA ---
             st.markdown("---")
-            st.subheader("📍 Mapa Geográfico de Registros")
+            st.subheader("📍 Mapa de Registros")
             coords = {
                 'BUGA': [3.9009, -76.3008], 'CALI': [3.4516, -76.5320], 'BOGOTA': [4.7110, -74.0721],
                 'MEDELLIN': [6.2442, -75.5812], 'PALMIRA': [3.5394, -76.3036], 'TULUA': [4.0847, -76.1954],
@@ -296,12 +287,9 @@ if check_session():
                 map_data.columns = ['Ciudad', 'Cantidad']
                 map_data['lat'] = map_data['Ciudad'].apply(lambda x: coords.get(x, [3.9, -76.3])[0])
                 map_data['lon'] = map_data['Ciudad'].apply(lambda x: coords.get(x, [3.9, -76.3])[1])
-
-                fig_map = px.scatter_mapbox(
-                    map_data, lat="lat", lon="lon", size="Cantidad", color="Cantidad",
-                    color_continuous_scale="RdPu", size_max=40, zoom=7,
-                    mapbox_style="carto-positron", hover_name="Ciudad"
-                )
+                fig_map = px.scatter_mapbox(map_data, lat="lat", lon="lon", size="Cantidad", color="Cantidad",
+                                          color_continuous_scale="RdPu", size_max=40, zoom=7,
+                                          mapbox_style="carto-positron", hover_name="Ciudad")
                 fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
                 st.plotly_chart(fig_map, use_container_width=True)
         else: st.info("Sin registros para analizar.")
