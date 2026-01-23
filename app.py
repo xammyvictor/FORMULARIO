@@ -31,15 +31,17 @@ def normalizar(texto):
     texto = str(texto).upper().strip()
     texto = unicodedata.normalize("NFD", texto)
     texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
+    # Limpia espacios dobles que puedan venir de la base de datos
     return " ".join(texto.split())
 
 def normalizar_para_mapa(muni):
     """Mapea nombres de entrada a la identificación oficial del DANE en el GeoJSON."""
     m = normalizar(muni)
     mapping = {
-        "BUGA": "GUADALAJARA DE BUGA",
-        "CALI": "SANTIAGO DE CALI", # Mapeo estándar DANE
+        "CALI": "SANTIAGO DE CALI",
         "SANTIAGO DE CALI": "SANTIAGO DE CALI",
+        "BUGA": "GUADALAJARA DE BUGA",
+        "GUADALAJARA DE BUGA": "GUADALAJARA DE BUGA",
         "JAMUNDI": "JAMUNDI",
         "TULUA": "TULUA",
         "GUACARI": "GUACARI",
@@ -61,9 +63,24 @@ def normalizar_para_mapa(muni):
         "RESTREPO": "RESTREPO",
         "ROLDANILLO": "ROLDANILLO",
         "SEVILLA": "SEVILLA",
-        "ZARZAL": "ZARZAL"
+        "ZARZAL": "ZARZAL",
+        "EL DOVIO": "EL DOVIO",
+        "LA VICTORIA": "LA VICTORIA",
+        "OBANDO": "OBANDO",
+        "ANSERMANUEVO": "ANSERMANUEVO",
+        "ARGELIA": "ARGELIA",
+        "BOLIVAR": "BOLIVAR",
+        "EL CAIRO": "EL CAIRO",
+        "EL AGUILA": "EL AGUILA",
+        "LA CUMBRE": "LA CUMBRE",
+        "SAN PEDRO": "SAN PEDRO",
+        "TORO": "TORO",
+        "TRUJILLO": "TRUJILLO",
+        "ULLOA": "ULLOA",
+        "VERSALLES": "VERSALLES",
+        "VIJES": "VIJES",
+        "YOTOCO": "YOTOCO"
     }
-    # Si el mapeo falla, devolvemos el nombre normalizado original
     return mapping.get(m, m)
 
 # --- 3. ESTILOS VISUALES ---
@@ -196,7 +213,6 @@ def get_valle_geojson(url):
                 props = feature["properties"]
                 # Código DANE del Valle del Cauca es 76
                 if str(props.get("DPTO_CCDGO")) == "76":
-                    # Extraemos el nombre y lo normalizamos para que sea el ID de búsqueda
                     m_name = normalizar(props.get("MPIO_CNMBR", ""))
                     feature["id"] = m_name
                     valle_features.append(feature)
@@ -312,8 +328,8 @@ def view_estadisticas():
     st.subheader("📍 Visualización Territorial Completa")
     
     m_df = df.copy()
-    # Aplicamos el mapeo para asegurar que Cali sea SANTIAGO DE CALI (o el nombre en el GeoJSON)
-    m_df['ID_MPIO'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
+    # Aplicamos el mapeo asegurando que CALI -> SANTIAGO DE CALI
+    m_df['ID_MPIO'] = m_df['Ciudad'].apply(normalizar_para_mapa)
     counts = m_df['ID_MPIO'].value_counts().reset_index()
     counts.columns = ['ID_MPIO', 'Registros']
     
@@ -360,7 +376,6 @@ def view_estadisticas():
                 showlegend=False
             ))
             
-            # Forzamos que el mapa use todo el canvas sin bordes internos
             fig.update_geos(
                 fitbounds="locations",
                 visible=False,
@@ -373,7 +388,6 @@ def view_estadisticas():
                 selector=dict(type='choropleth')
             )
             
-            # Altura al máximo y márgenes a cero absoluto
             fig.update_layout(
                 margin={"r":0,"t":0,"l":0,"b":0}, 
                 height=1000,
