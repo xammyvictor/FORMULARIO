@@ -279,7 +279,6 @@ elif opcion == "📊 Estadísticas":
         st.info("No hay datos para mostrar.")
     else:
         q = st.text_input("Buscar...").upper()
-
         if q:
             res = df[df.astype(str).apply(
                 lambda x: x.str.upper().str.contains(q, na=False)
