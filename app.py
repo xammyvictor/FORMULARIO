@@ -25,14 +25,14 @@ st.set_page_config(
 def normalizar(texto):
     if not texto: return ""
     texto = str(texto).upper().strip()
-    # Eliminar acentos y diéresis
     texto = unicodedata.normalize("NFD", texto)
     texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
-    return texto
+    # Eliminar espacios extra y caracteres especiales
+    return " ".join(texto.split())
 
 def normalizar_para_mapa(muni):
     m = normalizar(muni)
-    # Mapeo de nombres comunes a nombres oficiales del GeoJSON
+    # Diccionario de traducción para nombres oficiales en GeoJSON de santiblanko
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
@@ -40,6 +40,7 @@ def normalizar_para_mapa(muni):
         "TULUA": "TULUA",
         "GUACARI": "GUACARI",
         "DARIEN": "CALIMA",
+        "CALIMA": "CALIMA",
         "LA UNION": "LA UNION",
         "RIOFRIO": "RIOFRIO",
         "ANDALUCIA": "ANDALUCIA"
@@ -84,6 +85,7 @@ def apply_custom_styles():
             background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%);
             height: 100%;
             border-radius: 20px;
+            transition: width 1s ease-in-out;
         }
 
         .pulse-kpi-card {
@@ -163,7 +165,7 @@ def save_data(data_dict):
 
 @st.cache_data(ttl=3600)
 def get_valle_geojson():
-    """Descarga y filtra el GeoJSON para el Valle del Cauca de forma robusta"""
+    """Descarga y filtra el GeoJSON centrado en el Valle del Cauca"""
     try:
         url = "https://raw.githubusercontent.com/santiblanko/colombia.geojson/master/mpio.json"
         response = requests.get(url, timeout=10)
@@ -172,19 +174,17 @@ def get_valle_geojson():
         valle_features = []
         for feature in data["features"]:
             props = feature["properties"]
-            # Buscamos el nombre del departamento en diferentes posibles llaves
-            dpto_val = props.get("DPTO_CNMBR") or props.get("dpto") or props.get("NOMBRE_DPT") or ""
+            # Intentar identificar por nombre de departamento o código DANE (Valle = 76)
+            dpto = normalizar(str(props.get("DPTO_CNMBR", "")))
+            cod_dpto = str(props.get("DPTO_CCDGO", ""))
             
-            if normalizar(dpto_val) == "VALLE DEL CAUCA":
-                # Buscamos el nombre del municipio
-                m_name = props.get("MPIO_CNMBR") or props.get("mpio") or props.get("NOMBRE_MPI") or ""
-                # Creamos una llave estándar para el cruce de datos
+            if dpto == "VALLE DEL CAUCA" or cod_dpto == "76":
+                # Normalizamos la propiedad de cruce
+                m_name = props.get("MPIO_CNMBR") or props.get("NOMBRE_MPI") or ""
                 props["MPIO_NORM"] = normalizar(m_name)
                 valle_features.append(feature)
         
-        if not valle_features:
-            return None
-            
+        if not valle_features: return None
         data["features"] = valle_features
         return data
     except Exception:
@@ -244,17 +244,17 @@ def view_registro():
                     "barrio": bar.upper(), "ciudad": ciu.upper(), "puesto": pue.upper()
                 })
                 if success:
-                    st.success("¡Registro guardado!")
+                    st.success("¡Registro guardado exitosamente!")
                     st.session_state.f_reset += 1
                     time.sleep(1)
                     st.rerun()
-                else: st.error("Error al guardar.")
-            else: st.warning("Nombre, Cédula y Teléfono obligatorios.")
+                else: st.error("Error de conexión.")
+            else: st.warning("Por favor complete los campos obligatorios.")
 
 def view_estadisticas():
     df = get_data()
     if df.empty:
-        st.info("No hay datos para mostrar.")
+        st.info("No hay datos registrados aún.")
         return
 
     st.title("Pulse Analytics | Valle del Cauca")
@@ -286,18 +286,19 @@ def view_estadisticas():
     v_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
 
     k1, k2, k3, k4 = st.columns(4)
-    for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
+    metricas = [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]
+    for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
     # --- MAPA ---
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📍 Distribución Territorial")
+    st.subheader("📍 Concentración Territorial")
     
-    # Preparación de datos del mapa
+    # Preparación de datos del mapa con normalización agresiva
     m_df = df.copy()
-    m_df['MPIO_MATCH'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
-    map_data = m_df['MPIO_MATCH'].value_counts().reset_index()
-    map_data.columns = ['Municipio_Norm', 'Registros']
+    m_df['MPIO_NORM'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
+    map_data = m_df['MPIO_NORM'].value_counts().reset_index()
+    map_data.columns = ['MPIO_ID', 'Registros']
     
     c_map_view, c_map_stats = st.columns([2, 1])
     
@@ -307,47 +308,52 @@ def view_estadisticas():
             fig = px.choropleth(
                 map_data, 
                 geojson=geojson_data, 
-                locations='Municipio_Norm',
+                locations='MPIO_ID',
                 featureidkey="properties.MPIO_NORM", 
                 color='Registros',
                 color_continuous_scale="Reds",
                 template="plotly_white",
-                labels={'Registros': 'Total'}
+                scope="south america", # Centramos inicialmente en el continente
+                labels={'Registros': 'Total Registros'}
             )
-            # Ajustamos para que se vea el Valle del Cauca incluso si hay pocos datos
+            # Forzamos el zoom al Valle del Cauca y ocultamos el resto del mundo
             fig.update_geos(
-                fitbounds="locations", 
-                visible=True, # Cambiado a True para ver contornos base
-                showcountries=False,
-                showcoastlines=True,
-                coastlinecolor="#E2E8F0"
+                center=dict(lat=3.85, lon=-76.5), # Coordenadas promedio del Valle
+                projection_scale=35, # Nivel de zoom alto
+                visible=False,
+                showcoastlines=False,
+                fitbounds="locations"
             )
-            fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
+            fig.update_layout(
+                margin={"r":0,"t":0,"l":0,"b":0}, 
+                height=550,
+                coloraxis_colorbar=dict(title="Densidad", thickness=15)
+            )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.error("No se pudo cargar la capa geográfica del Valle del Cauca.")
+            st.error("Error al cargar la capa geográfica del departamento.")
             st.dataframe(map_data, use_container_width=True)
 
     with c_map_stats:
-        st.write("**🔥 Zonas con más actividad**")
-        top_data = map_data.head(5)
-        for _, row in top_data.iterrows():
+        st.write("**🔥 Municipios con más registros**")
+        for _, row in map_data.head(6).iterrows():
             st.markdown(f"""
-                <div class="rank-item" style="padding:10px; margin-bottom:8px;">
-                    <span style="font-weight:600;">{row['Municipio_Norm']}</span>
+                <div class="rank-item" style="padding:12px; margin-bottom:8px;">
+                    <span style="font-weight:600; font-size:0.9rem;">{row['MPIO_ID']}</span>
                     <span class="hotspot-pill">{row['Registros']} regs</span>
                 </div>
             """, unsafe_allow_html=True)
         
-        st.metric("Municipios Registrados", f"{len(map_data)} / {MUNICIPIOS_VALLE}")
-        st.metric("Media por Municipio", f"{int(map_data['Registros'].mean()) if not map_data.empty else 0}")
+        st.markdown("---")
+        st.metric("Cobertura Departamental", f"{len(map_data)} / {MUNICIPIOS_VALLE}")
+        st.metric("Promedio por Municipio", f"{int(map_data['Registros'].mean()) if not map_data.empty else 0}")
 
-    # --- RANKING Y TENDENCIA ---
+    # --- LEADERBOARD Y TENDENCIA ---
     st.markdown("---")
     c_rank, c_trend = st.columns([1, 1.5])
     
     with c_rank:
-        st.subheader("🏆 Leaderboard")
+        st.subheader("🏆 Leaderboard de Líderes")
         ranking = df['Registrado Por'].value_counts().reset_index()
         ranking.columns = ['Líder', 'Total']
         for i, row in ranking.head(8).iterrows():
@@ -365,7 +371,7 @@ def view_estadisticas():
         st.subheader("📈 Actividad Histórica")
         trend = df.groupby('F_S').size().reset_index(name='Ingresos')
         fig_trend = px.area(trend, x='F_S', y='Ingresos', color_discrete_sequence=['#E91E63'])
-        fig_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350, xaxis_title=None, yaxis_title=None)
+        fig_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=380, xaxis_title=None, yaxis_title=None)
         st.plotly_chart(fig_trend, use_container_width=True)
 
 def view_busqueda():
@@ -374,12 +380,13 @@ def view_busqueda():
     if not df.empty:
         q = st.text_input("Buscar por nombre, cédula o municipio...").upper()
         if q:
+            # Filtrar en todas las columnas convirtiendo a texto
             res = df[df.astype(str).apply(lambda x: q in x.str.upper().values, axis=1)]
-            st.dataframe(res, use_container_width=True)
+            st.dataframe(res, use_container_width=True, hide_index=True)
         else:
-            st.dataframe(df.tail(100), use_container_width=True)
+            st.dataframe(df.tail(100), use_container_width=True, hide_index=True)
 
-# --- 7. EJECUCIÓN PRINCIPAL ---
+# --- 7. EJECUCIÓN ---
 if __name__ == "__main__":
     apply_custom_styles()
     
@@ -387,23 +394,21 @@ if __name__ == "__main__":
         usuario = st.session_state.user_name
         es_admin = usuario.lower() in USUARIOS_ADMIN and not st.session_state.get("is_guest", False)
 
+        # Sidebar unificado
         st.sidebar.markdown(f"""
             <div style='background:#F1F5F9; padding:20px; border-radius:18px; margin-bottom:20px;'>
-                <p style='margin:0; font-size:0.75rem; font-weight:700; color:#64748B;'>SESIÓN PULSE</p>
+                <p style='margin:0; font-size:0.75rem; font-weight:700; color:#64748B;'>SESIÓN ACTIVA</p>
                 <p style='margin:0; font-size:1.1rem; font-weight:800; color:#0F172A;'>{usuario.upper()}</p>
             </div>
         """, unsafe_allow_html=True)
         
-        menu = ["📝 Registro", "📊 Estadísticas", "🔍 Búsqueda"] if es_admin else ["📝 Registro"]
-        opcion = st.sidebar.radio("MENÚ PRINCIPAL", menu)
+        opciones = ["📝 Registro", "📊 Estadísticas", "🔍 Búsqueda"] if es_admin else ["📝 Registro"]
+        opcion = st.sidebar.radio("MENÚ PRINCIPAL", opciones)
         
         if st.sidebar.button("Cerrar Sesión"):
             st.session_state.clear()
             st.rerun()
 
-        if opcion == "📝 Registro":
-            view_registro()
-        elif opcion == "📊 Estadísticas":
-            view_estadisticas()
-        elif opcion == "🔍 Búsqueda":
-            view_busqueda()
+        if opcion == "📝 Registro": view_registro()
+        elif opcion == "📊 Estadísticas": view_estadisticas()
+        elif opcion == "🔍 Búsqueda": view_busqueda()
