@@ -322,63 +322,61 @@ if check_auth():
                 # Toggle de vista para el usuario
                 map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots de Concentración"], horizontal=True)
                 
-                try:
+                try:                
                     geojson_url = "https://raw.githubusercontent.com/santiblanko/colombia.geojson/master/mpio.json"
                     geojson_data = requests.get(geojson_url).json()
                     geojson_data["features"] = [
                         f for f in geojson_data["features"]
-                        if f["properties"]["DPTO_CNMBR"] == "VALLE DEL CAUCA"
-                    ]
-                    map_data["Municipio"] = map_data["Municipio"].apply(normalizar)
-                    for f in geojson_data["features"]:
-                        f["properties"]["MPIO_CNMBR"] = normalizar(
-                            f["properties"]["MPIO_CNMBR"]
-                        )
-                        if map_mode == "Coropleta Territorial":
-                            fig = px.choropleth(
-                                map_data, 
-                                geojson=geojson_data, 
-                                locations='Municipio',
-                                featureidkey="properties.MPIO_CNMBR", 
-                                color='Registros',
-                                color_continuous_scale="YlOrRd",
-                                template="plotly_white",
-                                labels={'Registros': 'Total Registros'}
-                            )
-                        else:
-                            fig = px.choropleth(
-                                map_data, 
-                                geojson=geojson_data, 
-                                locations='Municipio',
-                                featureidkey="properties.MPIO_CNMBR",  # <-- CORRECTO
-                                color='Registros',
-                                color_continuous_scale="Reds",
-                                template="plotly_white"
-                            )
-                            fig.update_traces(marker_line_width=0.5, marker_line_color="white")
-                     
-                        else:
-                            fig = px.choropleth(
-                                map_data, geojson=geojson_data, locations='Municipio',
-                                featureidkey="properties.MPIO_CNMBR", color='Registros',
-                                color_continuous_scale="Reds", template="plotly_white"
-                            )
-                            fig.update_traces(marker_line_width=0.5, marker_line_color="white")
-                            fig.update_geos(fitbounds="locations", visible=False)
-                            fig.update_layout(
-                                margin={"r":0,"t":0,"l":0,"b":0}, 
-                                height=600,
-                                coloraxis_colorbar=dict(
-                                    title="Densidad",
-                                    thicknessmode="pixels", thickness=15,
-                                    lenmode="pixels", len=300,
-                                    yanchor="middle", y=0.5,
-                                    ticks="outside"
-                                )
-                            )
-                            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-                            except:
-                                st.error("Error al cargar el dibujo del mapa.")
+        if f["properties"]["DPTO_CNMBR"] == "VALLE DEL CAUCA"
+    ]
+    map_data["Municipio"] = map_data["Municipio"].apply(normalizar)
+    for f in geojson_data["features"]:
+        f["properties"]["MPIO_CNMBR"] = normalizar(
+            f["properties"]["MPIO_CNMBR"]
+        )
+
+    if map_mode == "Coropleta Territorial":
+        fig = px.choropleth(
+            map_data, 
+            geojson=geojson_data, 
+            locations='Municipio',
+            featureidkey="properties.MPIO_CNMBR", 
+            color='Registros',
+            color_continuous_scale="YlOrRd",
+            template="plotly_white",
+            labels={'Registros': 'Total Registros'}
+        )
+        fig.update_geos(fitbounds="locations", visible=False)
+
+    else:
+        fig = px.choropleth(
+            map_data, 
+            geojson=geojson_data, 
+            locations='Municipio',
+            featureidkey="properties.MPIO_CNMBR",
+            color='Registros',
+            color_continuous_scale="Reds",
+            template="plotly_white"
+        )
+        fig.update_traces(marker_line_width=0.5, marker_line_color="white")
+        fig.update_geos(fitbounds="locations", visible=False)
+        fig.update_layout(
+            margin={"r":0,"t":0,"l":0,"b":0}, 
+            height=600,
+            coloraxis_colorbar=dict(
+                title="Densidad",
+                thicknessmode="pixels", thickness=15,
+                lenmode="pixels", len=300,
+                yanchor="middle", y=0.5,
+                ticks="outside"
+            )
+        )
+
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+except:
+    st.error("Error al cargar el dibujo del mapa.")
+
                                 with c_map_stats:
                                     st.markdown("<div style='padding-top: 50px;'></div>", unsafe_allow_html=True)
                                     st.write("**🔥 Puntos Críticos (Hotspots)**")
