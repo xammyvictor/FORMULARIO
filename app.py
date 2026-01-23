@@ -327,27 +327,25 @@ if check_auth():
                     geojson_data = requests.get(geojson_url).json()
                     geojson_data["features"] = [
                         f for f in geojson_data["features"]
-        if f["properties"]["DPTO_CNMBR"] == "VALLE DEL CAUCA"
-    ]
-    map_data["Municipio"] = map_data["Municipio"].apply(normalizar)
-    for f in geojson_data["features"]:
-        f["properties"]["MPIO_CNMBR"] = normalizar(
-            f["properties"]["MPIO_CNMBR"]
-        )
-
-    if map_mode == "Coropleta Territorial":
-        fig = px.choropleth(
-            map_data, 
-            geojson=geojson_data, 
-            locations='Municipio',
-            featureidkey="properties.MPIO_CNMBR", 
-            color='Registros',
-            color_continuous_scale="YlOrRd",
-            template="plotly_white",
-            labels={'Registros': 'Total Registros'}
-        )
-        fig.update_geos(fitbounds="locations", visible=False)
-
+                        if f["properties"]["DPTO_CNMBR"] 
+                    ]
+                    map_data["Municipio"] = map_data["Municipio"].apply(normalizar)
+                    for f in geojson_data["features"]:
+                        f["properties"]["MPIO_CNMBR"] = normalizar(
+                            f["properties"]["MPIO_CNMBR"]
+                        )
+                        if map_mode == "Coropleta Territorial":
+                            fig = px.choropleth(
+                                map_data, 
+                                geojson=geojson_data, 
+                                locations='Municipio',
+                                featureidkey="properties.MPIO_CNMBR", 
+                                color='Registros',
+                                color_continuous_scale="YlOrRd",
+                                template="plotly_white",
+                                labels={'Registros': 'Total Registros'}
+                            )
+                            fig.update_geos(fitbounds="locations", visible=False)
     else:
         fig = px.choropleth(
             map_data, 
