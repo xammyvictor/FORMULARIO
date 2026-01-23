@@ -330,6 +330,18 @@ if check_auth():
                                 {f["properties"]["MPIO_CNMBR"] for f in geojson_data["features"]}
                             )
                         )
+                        st.subheader("DEBUG MAPA")
+                        st.write("Columnas map_data:", map_data.columns.tolist())
+                        st.write("Filas map_data:", len(map_data))
+                        st.write("Municipios en map_data:")
+                        st.write(sorted(map_data["Municipio"].astype(str).unique()))
+                        st.write("Municipios en GeoJSON (Valle del Cauca):")
+                        st.write(
+                            sorted(
+                                [f["properties"]["MPIO_CNMBR"] for f in geojson_data["features"]]
+                            )
+                        )
+
 
 
 
