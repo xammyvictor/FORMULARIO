@@ -295,10 +295,9 @@ if check_auth():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- 3. MAPA REDISEÑADO ---
+            # --- 3. MAPA CORREGIDO ---
             st.subheader("📍 Mapa de Calor y Concentración Territorial")
             
-            # Procesamiento de datos para el mapa
             m_df = df.copy()
             m_df['Municipio_Map'] = m_df['Ciudad'].apply(normalizar_para_mapa)
             map_data = m_df['Municipio_Map'].value_counts().reset_index()
@@ -307,58 +306,48 @@ if check_auth():
             c_map_view, c_map_stats = st.columns([2, 1])
             
             with c_map_view:
-                # Toggle de vista para el usuario
                 map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots de Concentración"], horizontal=True)
                 
                 try:
-                    geojson_url = "https://raw.githubusercontent.com/marcovega/colombia-json/master/colombia.min.json"
-                    response = requests.get(geojson_url)
-                    geojson_data = response.json()
+                    # USANDO URL ALTERNATIVA VERIFICADA
+                    url_geojson = "https://raw.githubusercontent.com/marcovega/colombia-json/master/colombia.min.json"
+                    response = requests.get(url_geojson)
+                    data_full = response.json()
+                    
+                    # Filtramos solo para el Valle del Cauca del archivo nacional
+                    valle_geojson = {
+                        "type": "FeatureCollection",
+                        "features": [f for f in data_full['features'] if f['properties']['DPTO_CNMBRE'] == 'VALLE DEL CAUCA']
+                    }
                     
                     if map_mode == "Coropleta Territorial":
-                        # Mapa de Calor por regiones (Dibujo limpio)
                         fig = px.choropleth(
                             map_data, 
-                            geojson=geojson_data, 
+                            geojson=valle_geojson, 
                             locations='Municipio',
-                            featureidkey="properties.name", 
+                            featureidkey="properties.MPIO_CNMBRE", 
                             color='Registros',
-                            color_continuous_scale="YlOrRd", # Amarillo -> Naranja -> Rojo (Intuitivo)
+                            color_continuous_scale="YlOrRd",
                             template="plotly_white",
-                            labels={'Registros': 'Total Registros'}
+                            labels={'Registros': 'Total'}
                         )
                     else:
-                        # Mapa de Burbujas / Hotspots sobre el dibujo
-                        # Calculamos centroides aproximados o simplemente usamos el dibujo como base
                         fig = px.choropleth(
-                            map_data, geojson=geojson_data, locations='Municipio',
-                            featureidkey="properties.name", color='Registros',
+                            map_data, geojson=valle_geojson, locations='Municipio',
+                            featureidkey="properties.MPIO_CNMBRE", color='Registros',
                             color_continuous_scale="Reds", template="plotly_white"
                         )
-                        # Añadimos puntos de calor (Burbujas) para resaltar municipios pequeños
-                        # En este caso simulamos el efecto visual mejorando el contraste de la coropleta
                         fig.update_traces(marker_line_width=0.5, marker_line_color="white")
 
                     fig.update_geos(fitbounds="locations", visible=False)
-                    fig.update_layout(
-                        margin={"r":0,"t":0,"l":0,"b":0}, 
-                        height=600,
-                        coloraxis_colorbar=dict(
-                            title="Densidad",
-                            thicknessmode="pixels", thickness=15,
-                            lenmode="pixels", len=300,
-                            yanchor="middle", y=0.5,
-                            ticks="outside"
-                        )
-                    )
+                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=600)
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-                except:
-                    st.error("Error al cargar el dibujo del mapa.")
+                except Exception as e:
+                    st.error(f"Error al cargar el mapa: {e}")
 
             with c_map_stats:
                 st.markdown("<div style='padding-top: 50px;'></div>", unsafe_allow_html=True)
                 st.write("**🔥 Puntos Críticos (Hotspots)**")
-                # Top 5 municipios con más actividad
                 hotspots = map_data.head(5)
                 for _, row in hotspots.iterrows():
                     st.markdown(f"""
@@ -369,7 +358,6 @@ if check_auth():
                     """, unsafe_allow_html=True)
                 
                 st.markdown("---")
-                # Resumen de actividad por zona (Ejemplo)
                 st.write("**Resumen de Cobertura**")
                 st.metric("Municipios Cubiertos", f"{len(map_data)} / 42")
                 st.metric("Promedio por Municipio", f"{int(map_data['Registros'].mean())}")
