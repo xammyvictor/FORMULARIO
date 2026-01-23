@@ -21,7 +21,7 @@ st.set_page_config(
 )
 
 # --------------------------------------------------
-# CSS (NO TOCADO)
+# CSS (SIN CAMBIOS)
 # --------------------------------------------------
 st.markdown("""
 <style>
@@ -111,7 +111,7 @@ def normalizar_para_mapa(m):
     return mapping.get(m, m)
 
 # --------------------------------------------------
-# AUTH (RESTAURADO)
+# AUTH
 # --------------------------------------------------
 def check_auth():
     if "logged_in" not in st.session_state:
@@ -199,7 +199,7 @@ if check_auth():
 
             if st.form_submit_button("GUARDAR REGISTRO"):
                 if nom and ced and tel:
-                    ok = save_data({
+                    if save_data({
                         "nombre": nom.upper(),
                         "cedula": ced,
                         "telefono": tel,
@@ -208,8 +208,7 @@ if check_auth():
                         "barrio": bar.upper(),
                         "ciudad": ciu.upper(),
                         "puesto": pue.upper()
-                    })
-                    if ok:
+                    }):
                         st.success("Registro guardado")
                         st.session_state.f_reset += 1
                         time.sleep(1)
@@ -218,30 +217,23 @@ if check_auth():
                     st.warning("Complete Nombre, Cédula y Teléfono")
 
     # --------------------------------------------------
-    # ESTADÍSTICAS
+    # ESTADÍSTICAS (MAPA CORREGIDO)
     # --------------------------------------------------
-elif opcion == "📊 Estadísticas":
+    elif opcion == "📊 Estadísticas":
 
-    st.title("📊 Pulse Analytics")
+        st.title("📊 Pulse Analytics | Valle del Cauca")
 
-    df = get_data()
-    if df.empty:
-        st.info("No hay datos para mostrar.")
-    else:
-        df["Municipio_Map"] = df["Ciudad"].apply(normalizar_para_mapa)
-        map_data = df["Municipio_Map"].value_counts().reset_index()
-        map_data.columns = ["Municipio", "Registros"]
+        df = get_data()
+        if df.empty:
+            st.info("No hay datos para mostrar.")
+        else:
+            df["Municipio_Map"] = df["Ciudad"].apply(normalizar_para_mapa)
+            map_data = df["Municipio_Map"].value_counts().reset_index()
+            map_data.columns = ["Municipio", "Registros"]
 
-        c_map_view, c_map_stats = st.columns([2, 1])
+            c_map, _ = st.columns([2, 1])
 
-        with c_map_view:
-            map_mode = st.radio(
-                "Modo de Visualización:",
-                ["Coropleta Territorial", "Hotspots de Concentración"],
-                horizontal=True
-            )
-
-            try:
+            with c_map:
                 geojson_url = (
                     "https://raw.githubusercontent.com/"
                     "caticoa3/colombia_mapa/master/"
@@ -263,30 +255,22 @@ elif opcion == "📊 Estadísticas":
                 fig.update_layout(height=600)
                 st.plotly_chart(fig, use_container_width=True)
 
-            except Exception as e:
-                st.error(f"Error al cargar el mapa: {e}")
-
-
     # --------------------------------------------------
     # BÚSQUEDA
     # --------------------------------------------------
-   elif opcion == "🔍 Búsqueda":
+    elif opcion == "🔍 Búsqueda":
+        st.title("🔍 Explorador de Registros")
 
-    st.title("🔍 Explorador de Registros")
-
-    df = get_data()
-    if df.empty:
-        st.info("No hay datos para mostrar.")
-    else:
-        q = st.text_input("Buscar...").upper()
-
-        if q:
-            res = df[df.astype(str).apply(
-                lambda x: x.str.upper().str.contains(q, na=False),
-                axis=1
-            )]
-            st.dataframe(res, use_container_width=True)
+        df = get_data()
+        if df.empty:
+            st.info("No hay datos para mostrar.")
         else:
-            st.dataframe(df.tail(100), use_container_width=True)
-
-            st.dataframe(df.tail(100), use_container_width=True)
+            q = st.text_input("Buscar...").upper()
+            if q:
+                res = df[df.astype(str).apply(
+                    lambda x: x.str.upper().str.contains(q, na=False),
+                    axis=1
+                )]
+                st.dataframe(res, use_container_width=True)
+            else:
+                st.dataframe(df.tail(100), use_container_width=True)
