@@ -37,10 +37,11 @@ def normalizar_para_mapa(muni):
     """Convierte nombres de la base de datos a los nombres oficiales del GeoJSON DANE."""
     m = normalizar(muni)
     
-    # Diccionario de traducción: Nombre en DB -> Nombre exacto en GeoJSON
+    # REGLA DE ORO PARA CALI: Asegurar coincidencia con SANTIAGO DE CALI
+    if "CALI" in m:
+        return "SANTIAGO DE CALI"
+    
     mapping = {
-        "CALI": "SANTIAGO DE CALI",
-        "SANTIAGO DE CALI": "SANTIAGO DE CALI",
         "BUGA": "GUADALAJARA DE BUGA",
         "GUADALAJARA DE BUGA": "GUADALAJARA DE BUGA",
         "JAMUNDI": "JAMUNDI",
@@ -212,8 +213,8 @@ def get_valle_geojson(url):
             for feature in data["features"]:
                 props = feature["properties"]
                 if str(props.get("DPTO_CCDGO")) == "76":
-                    # Identificador único basado en el nombre oficial limpio
-                    m_id = normalizar(props.get("MPIO_CNMBR", ""))
+                    # Usamos la misma función de normalización para el ID del mapa
+                    m_id = normalizar_para_mapa(props.get("MPIO_CNMBR", ""))
                     feature["id"] = m_id
                     valle_features.append(feature)
             
@@ -324,12 +325,11 @@ def view_estadisticas():
     st.subheader("📍 Visualización Territorial Departamental")
     
     m_df = df.copy()
-    # Traducimos lo de la DB (Cali, Buga, etc) al nombre oficial que usa el mapa
     m_df['ID_MPIO'] = m_df['Ciudad'].apply(normalizar_para_mapa)
     counts = m_df['ID_MPIO'].value_counts().reset_index()
     counts.columns = ['ID_MPIO', 'Registros']
     
-    c_map_view, c_map_stats = st.columns([10, 1])
+    c_map_view, c_map_stats = st.columns([6, 1])
     
     with c_map_view:
         geojson_data = get_valle_geojson(URL_GITHUB_GEO)
@@ -366,7 +366,7 @@ def view_estadisticas():
                 lon=lons,
                 text=names,
                 mode='text',
-                textfont=dict(size=12, color="black", family="Plus Jakarta Sans", weight="bold"),
+                textfont=dict(size=11, color="black", family="Plus Jakarta Sans", weight="bold"),
                 hoverinfo='none',
                 showlegend=False
             ))
@@ -379,7 +379,7 @@ def view_estadisticas():
                 height=1000,
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
-                coloraxis_colorbar=dict(title="REGISTROS", thickness=30, len=0.6, yanchor="middle", y=0.5, xanchor="left", x=0.01)
+                coloraxis_colorbar=dict(title="REGISTROS", thickness=30, len=0.6, yanchor="middle", y=0.5, xanchor="left", x=0.02)
             )
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         else:
@@ -387,12 +387,12 @@ def view_estadisticas():
 
     with c_map_stats:
         st.write("**🔥 Ranking**")
-        # Mostrar el ranking real del dataframe original para mayor precisión visual
         ranking_display = counts.sort_values("Registros", ascending=False)
-        for _, row in ranking_display.head(15).iterrows(): 
+        for _, row in ranking_display.head(20).iterrows(): 
             st.markdown(f"""
-                <div class="rank-item" style="padding:5px; margin-bottom:5px; border-radius:10px;">
-                    <span style="font-weight:600; font-size:0.7rem;">{row['ID_MPIO']}</span>
+                <div class="rank-item" style="padding:8px; margin-bottom:6px; border-radius:12px;">
+                    <span style="font-weight:600; font-size:0.75rem;">{row['ID_MPIO']}</span>
+                    <span class="hotspot-pill" style="font-size:0.7rem; padding:2px 8px;">{row['Registros']}</span>
                 </div>
             """, unsafe_allow_html=True)
 
