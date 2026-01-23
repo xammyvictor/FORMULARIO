@@ -303,17 +303,17 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA MAXIMIZADO ---
+    # --- MAPA MAXIMIZADO SIN LÍMITES ---
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📍 Mapa Detallado de Concentración Territorial")
+    st.subheader("📍 Visualización Territorial Completa")
     
     m_df = df.copy()
     m_df['ID_MPIO'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
     counts = m_df['ID_MPIO'].value_counts().reset_index()
     counts.columns = ['ID_MPIO', 'Registros']
     
-    # Aumentamos el espacio para el mapa [3.5, 1] en lugar de [2.5, 1]
-    c_map_view, c_map_stats = st.columns([3.5, 1])
+    # Ajustamos proporciones para eliminar el efecto "encerrado" [5, 1]
+    c_map_view, c_map_stats = st.columns([5, 1])
     
     with c_map_view:
         geojson_data = get_valle_geojson(URL_GITHUB_GEO)
@@ -345,53 +345,64 @@ def view_estadisticas():
                 labels={'Registros': 'Total'}
             )
             
-            # Capa de etiquetas con fuente más grande (size=10)
+            # Etiquetas más visibles
             fig.add_trace(go.Scattergeo(
                 lat=lats,
                 lon=lons,
                 text=names,
                 mode='text',
-                textfont=dict(size=10, color="black", family="Plus Jakarta Sans", weight="bold"),
+                textfont=dict(size=11, color="black", family="Plus Jakarta Sans", weight="bold"),
                 hoverinfo='none',
                 showlegend=False
             ))
             
+            # Forzamos que el mapa use todo el canvas sin bordes internos
             fig.update_geos(
                 fitbounds="locations",
-                visible=False 
+                visible=False,
+                projection_type="mercator"
             )
             
             fig.update_traces(
-                marker_line_width=1.5,
+                marker_line_width=1.8,
                 marker_line_color="black",
                 selector=dict(type='choropleth')
             )
             
-            # Altura aumentada a 950 para mejor apreciación
+            # Altura al máximo y márgenes a cero absoluto
             fig.update_layout(
-                margin={"r":0,"t":20,"l":0,"b":0}, 
-                height=950,
+                margin={"r":0,"t":0,"l":0,"b":0}, 
+                height=1000,
                 paper_bgcolor="white",
                 plot_bgcolor="white",
-                coloraxis_colorbar=dict(title="REGISTROS", thickness=25, len=0.6, y=0.5)
+                coloraxis_colorbar=dict(
+                    title="REGISTROS", 
+                    thickness=25, 
+                    len=0.5, 
+                    yanchor="middle", 
+                    y=0.5,
+                    xanchor="left",
+                    x=0.02
+                ),
+                autosize=True
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         else:
             st.error("⚠️ No se pudo cargar el mapa.")
             st.dataframe(counts, use_container_width=True)
 
     with c_map_stats:
         st.write("**🔥 Ranking Municipal**")
-        for _, row in counts.head(15).iterrows(): # Mostramos más municipios en el lateral
+        for _, row in counts.head(20).iterrows(): # Más municipios visibles
             st.markdown(f"""
-                <div class="rank-item" style="padding:10px; margin-bottom:8px;">
-                    <span style="font-weight:600; font-size:0.85rem;">{row['ID_MPIO']}</span>
-                    <span class="hotspot-pill">{row['Registros']}</span>
+                <div class="rank-item" style="padding:8px; margin-bottom:6px; border-radius:12px;">
+                    <span style="font-weight:600; font-size:0.75rem;">{row['ID_MPIO']}</span>
+                    <span class="hotspot-pill" style="font-size:0.7rem; padding:2px 8px;">{row['Registros']}</span>
                 </div>
             """, unsafe_allow_html=True)
         
         st.markdown("---")
-        st.metric("Municipios Activos", f"{len(counts)} / {MUNICIPIOS_VALLE_TOTAL}")
+        st.metric("Municipios", f"{len(counts)}/42")
 
     # --- LEADERBOARD ---
     st.markdown("---")
