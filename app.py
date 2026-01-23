@@ -304,39 +304,49 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA RECONFIGURADO (SÓLO EL VALLE Y MUNICIPIOS) ---
+    # --- MAPA RECONFIGURADO (FRONTERAS NEGRAS Y COLOREADO DINÁMICO) ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📍 Concentración Territorial (Valle del Cauca)")
     
+    # Datos actuales de la base
     m_df = df.copy()
     m_df['ID_MPIO'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
-    map_data = m_df['ID_MPIO'].value_counts().reset_index()
-    map_data.columns = ['ID_MPIO', 'Registros']
+    counts = m_df['ID_MPIO'].value_counts().reset_index()
+    counts.columns = ['ID_MPIO', 'Registros']
     
     c_map_view, c_map_stats = st.columns([2.2, 1])
     
     with c_map_view:
         geojson_data = get_valle_geojson(URL_GITHUB_GEO)
         if geojson_data:
-            # Choropleth estándar con fondo blanco y aislamiento total
+            # Creamos una lista base con TODOS los municipios del GeoJSON para asegurar que se dibujen sus fronteras
+            all_ids = [f["id"] for f in geojson_data["features"]]
+            df_base = pd.DataFrame({"ID_MPIO": all_ids})
+            
+            # Unimos con los conteos reales. Los que no tengan datos quedan con 0.
+            map_data_full = df_base.merge(counts, on='ID_MPIO', how='left').fillna(0)
+            
+            # Choropleth estándar con fondo blanco
             fig = px.choropleth(
-                map_data, 
+                map_data_full, 
                 geojson=geojson_data, 
                 locations='ID_MPIO',
                 color='Registros',
-                color_continuous_scale="Reds",
+                # Escala personalizada: 0 es blanco (no pintado), >0 usa degradado rosado
+                color_continuous_scale=[[0, 'white'], [0.0001, '#FCE4EC'], [1, '#E91E63']],
                 labels={'Registros': 'Total'}
             )
             
-            # Ocultar el resto del mundo y centrar en los polígonos del Valle
+            # Ocultar el resto del mundo y centrar en el Valle
             fig.update_geos(
                 fitbounds="locations",
-                visible=False # Esto hace que sólo se vean los municipios proporcionados
+                visible=False 
             )
             
+            # Demarcación de fronteras con línea negra
             fig.update_traces(
-                marker_line_width=2,
-                marker_line_color="#1e293b" # Color pizarra oscuro para los bordes
+                marker_line_width=1.2,
+                marker_line_color="black"
             )
             
             fig.update_layout(
@@ -352,12 +362,12 @@ def view_estadisticas():
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.error("⚠️ No se pudo cargar el archivo GeoJSON. Mostrando datos tabulares.")
-            st.dataframe(map_data, use_container_width=True)
+            st.error("⚠️ No se pudo cargar el archivo GeoJSON.")
+            st.dataframe(counts, use_container_width=True)
 
     with c_map_stats:
         st.write("**🔥 Ranking Municipal**")
-        for _, row in map_data.head(8).iterrows():
+        for _, row in counts.head(8).iterrows():
             st.markdown(f"""
                 <div class="rank-item" style="padding:12px; margin-bottom:8px;">
                     <span style="font-weight:600; font-size:0.9rem;">{row['ID_MPIO']}</span>
@@ -366,8 +376,8 @@ def view_estadisticas():
             """, unsafe_allow_html=True)
         
         st.markdown("---")
-        st.metric("Municipios Activos", f"{len(map_data)} / {MUNICIPIOS_VALLE_TOTAL}")
-        st.metric("Gestión Promedio", f"{int(map_data['Registros'].mean()) if not map_data.empty else 0}")
+        st.metric("Municipios Activos", f"{len(counts)} / {MUNICIPIOS_VALLE_TOTAL}")
+        st.metric("Gestión Promedio", f"{int(counts['Registros'].mean()) if not counts.empty else 0}")
 
     # --- LEADERBOARD ---
     st.markdown("---")
