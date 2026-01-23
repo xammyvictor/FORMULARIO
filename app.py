@@ -8,8 +8,8 @@ from io import BytesIO
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
-import json
-import os
+import requests
+import numpy as np
 
 # --- CONFIGURACIÓN GENERAL ---
 BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
@@ -78,6 +78,7 @@ st.markdown("""
     }
     .kpi-label { color: var(--pulse-slate); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
     .kpi-val { color: var(--pulse-dark); font-size: 2.4rem; font-weight: 800; line-height: 1; }
+    .kpi-trend { font-size: 0.8rem; font-weight: 600; color: #10B981; margin-top: 12px; display: flex; align-items: center; gap: 5px; }
 
     /* Ranking Items */
     .rank-item {
@@ -94,9 +95,20 @@ st.markdown("""
     .rank-name { font-weight: 700; color: #1E293B; font-size: 0.95rem; }
     .rank-badge { background: #F8FAFC; color: #64748B; padding: 6px 14px; border-radius: 12px; font-weight: 700; font-size: 0.8rem; border: 1px solid #E2E8F0; }
 
-    /* UI Fixes */
+    /* Forms & Sidebar */
     .stSidebar { background-color: white !important; border-right: 1px solid #E2E8F0; }
     .stButton>button { border-radius: 14px !important; background: var(--pulse-pink) !important; font-weight: 700 !important; color: white !important; border: none !important; width: 100%; height: 3.2rem; }
+    
+    /* Hotspot Pill */
+    .hotspot-pill {
+        padding: 4px 12px;
+        background: #FEF2F2;
+        color: #B91C1C;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        border: 1px solid #FEE2E2;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -130,8 +142,8 @@ def save_data(data_dict):
         ts = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
         user = st.session_state.get("user_name", "Anónimo")
         row = [ts, user, data_dict["nombre"], data_dict["cedula"], data_dict["telefono"],
-                data_dict["ocupacion"], data_dict["direccion"], data_dict["barrio"], 
-                data_dict["ciudad"], data_dict.get("puesto", "")]
+               data_dict["ocupacion"], data_dict["direccion"], data_dict["barrio"], 
+               data_dict["ciudad"], data_dict.get("puesto", "")]
         sh.sheet1.append_row(row)
         return True
     except: return False
@@ -139,21 +151,44 @@ def save_data(data_dict):
 # --- NORMALIZACIÓN DE MUNICIPIOS ---
 def normalizar_para_mapa(muni):
     m = str(muni).upper().strip()
-    # Mapeo exacto para los nombres en el archivo GeoJSON (basado en el campo MUNC_CNMBR)
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
-        "GUADALAJARA DE BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
-        "SANTIAGO DE CALI": "SANTIAGO DE CALI",
         "JAMUNDI": "JAMUNDÍ",
         "TULUA": "TULUÁ",
         "GUACARI": "GUACARÍ",
         "DARIEN": "CALIMA",
         "CALIMA": "CALIMA",
+        "PALMIRA": "PALMIRA",
+        "CARTAGO": "CARTAGO",
+        "YUMBO": "YUMBO",
         "ANDALUCIA": "ANDALUCÍA",
+        "BUENAVENTURA": "BUENAVENTURA",
+        "BUGALAGRANDE": "BUGALAGRANDE",
+        "CAICEDONIA": "CAICEDONIA",
+        "CANDELARIA": "CANDELARIA",
+        "DAGUA": "DAGUA",
+        "EL CERRITO": "EL CERRITO",
+        "EL DOVIO": "EL DOVIO",
+        "FLORIDA": "FLORIDA",
+        "GINEBRA": "GINEBRA",
+        "LA CUMBRE": "LA CUMBRE",
         "LA UNION": "LA UNIÓN",
+        "LA VICTORIA": "LA VICTORIA",
+        "OBANDO": "OBANDO",
+        "PRADERA": "PRADERA",
+        "RESTREPO": "RESTREPO",
         "RIOFRIO": "RIOFRIO",
-        "BOLIVAR": "BOLÍVAR"
+        "ROLDANILLO": "ROLDANILLO",
+        "SAN PEDRO": "SAN PEDRO",
+        "SEVILLA": "SEVILLA",
+        "TORO": "TORO",
+        "TRUJILLO": "TRUJILLO",
+        "ULLOA": "ULLOA",
+        "VERSALLES": "VERSALLES",
+        "VIJES": "VIJES",
+        "YOTOCO": "YOTOCO",
+        "ZARZAL": "ZARZAL"
     }
     return mapping.get(m, m)
 
@@ -189,7 +224,7 @@ if "f_reset" not in st.session_state: st.session_state.f_reset = 0
 # --- DASHBOARD ---
 if check_auth():
     usuario = st.session_state.user_name
-    USUARIOS_ADMIN = ["fabian", "xammy", "brayan", "diegomonta"]
+    USUARIOS_ADMIN = ["fabian", "xammy", "brayan"]
     es_admin = usuario.lower() in USUARIOS_ADMIN and not st.session_state.get("is_guest", False)
 
     st.sidebar.markdown(f"<div style='background:#F1F5F9; padding:20px; border-radius:18px; margin-bottom:20px;'><p style='margin:0; font-size:0.75rem; font-weight:700; color:#64748B;'>SESIÓN PULSE</p><p style='margin:0; font-size:1.1rem; font-weight:800; color:#0F172A;'>{usuario.upper()}</p></div>", unsafe_allow_html=True)
@@ -228,6 +263,7 @@ if check_auth():
         if not df.empty:
             st.title("Pulse Analytics | Valle del Cauca")
             
+            # --- 1. HERO META ---
             total = len(df)
             perc = min((total / META_REGISTROS) * 100, 100)
             st.markdown(f"""
@@ -246,21 +282,23 @@ if check_auth():
                 </div>
             """, unsafe_allow_html=True)
 
-            k1, k2, k3, k4 = st.columns(4)
-            hoy = datetime.now().date()
+            # --- 2. KPIs ---
+            hoy = datetime.now()
             df['F_S'] = df['Fecha Registro'].dt.date
-            v_hoy = len(df[df['F_S'] == hoy])
-            v_8d = len(df[df['Fecha Registro'] > (datetime.now() - timedelta(days=8))])
-            v_30d = len(df[df['Fecha Registro'] > (datetime.now() - timedelta(days=30))])
-            
+            v_hoy = len(df[df['F_S'] == hoy.date()])
+            v_8d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=8))])
+            v_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
+
+            k1, k2, k3, k4 = st.columns(4)
             for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
                 col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- MAPA RECONSTRUIDO CON ARCHIVO LOCAL ---
+            # --- 3. MAPA REDISEÑADO ---
             st.subheader("📍 Mapa de Calor y Concentración Territorial")
             
+            # Procesamiento de datos para el mapa
             m_df = df.copy()
             m_df['Municipio_Map'] = m_df['Ciudad'].apply(normalizar_para_mapa)
             map_data = m_df['Municipio_Map'].value_counts().reset_index()
@@ -269,48 +307,74 @@ if check_auth():
             c_map_view, c_map_stats = st.columns([2, 1])
             
             with c_map_view:
-                map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots"], horizontal=True)
+                # Toggle de vista para el usuario
+                map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots de Concentración"], horizontal=True)
                 
                 try:
-                    # CARGA DEL ARCHIVO LOCAL DESDE TU REPOSITORIO
-                    if os.path.exists('valle.json'):
-                        with open('valle.json', 'r', encoding='utf-8') as f:
-                            valle_geojson = json.load(f)
-                        
-                        # Renderizado del mapa
+                    geojson_url = "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json"
+                    response = requests.get(geojson_url)
+                    geojson_data = response.json()
+                    
+                    if map_mode == "Coropleta Territorial":
+                        # Mapa de Calor por regiones (Dibujo limpio)
                         fig = px.choropleth(
                             map_data, 
-                            geojson=valle_geojson, 
+                            geojson=geojson_data, 
                             locations='Municipio',
-                            featureidkey="properties.MUNC_CNMBR", # Llave en tu archivo JSON
+                            featureidkey="properties.name", 
                             color='Registros',
-                            color_continuous_scale="YlOrRd" if map_mode == "Coropleta Territorial" else "Reds",
-                            template="plotly_white"
+                            color_continuous_scale="YlOrRd", # Amarillo -> Naranja -> Rojo (Intuitivo)
+                            template="plotly_white",
+                            labels={'Registros': 'Total Registros'}
                         )
-                        fig.update_geos(fitbounds="locations", visible=False)
-                        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
-                        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                     else:
-                        st.error("⚠️ Archivo 'valle.json' no encontrado en el repositorio.")
-                        st.info("Asegúrate de haber subido el archivo JSON a la raíz de tu GitHub.")
-                        st.dataframe(map_data)
-                        
-                except Exception as e:
-                    st.error(f"Error técnico cargando mapa: {str(e)}")
+                        # Mapa de Burbujas / Hotspots sobre el dibujo
+                        # Calculamos centroides aproximados o simplemente usamos el dibujo como base
+                        fig = px.choropleth(
+                            map_data, geojson=geojson_data, locations='Municipio',
+                            featureidkey="properties.name", color='Registros',
+                            color_continuous_scale="Reds", template="plotly_white"
+                        )
+                        # Añadimos puntos de calor (Burbujas) para resaltar municipios pequeños
+                        # En este caso simulamos el efecto visual mejorando el contraste de la coropleta
+                        fig.update_traces(marker_line_width=0.5, marker_line_color="white")
+
+                    fig.update_geos(fitbounds="locations", visible=False)
+                    fig.update_layout(
+                        margin={"r":0,"t":0,"l":0,"b":0}, 
+                        height=600,
+                        coloraxis_colorbar=dict(
+                            title="Densidad",
+                            thicknessmode="pixels", thickness=15,
+                            lenmode="pixels", len=300,
+                            yanchor="middle", y=0.5,
+                            ticks="outside"
+                        )
+                    )
+                    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                except:
+                    st.error("Error al cargar el dibujo del mapa.")
 
             with c_map_stats:
                 st.markdown("<div style='padding-top: 50px;'></div>", unsafe_allow_html=True)
-                st.write("**🔥 Puntos Críticos**")
-                for _, row in map_data.head(5).iterrows():
+                st.write("**🔥 Puntos Críticos (Hotspots)**")
+                # Top 5 municipios con más actividad
+                hotspots = map_data.head(5)
+                for _, row in hotspots.iterrows():
                     st.markdown(f"""
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 10px; background: white; border-radius: 12px; border: 1px solid #F1F5F9;">
                             <span style="font-weight: 600; color: #1E293B;">{row['Municipio']}</span>
-                            <span style="background: #FCE4EC; color: #E91E63; padding: 4px 10px; border-radius: 8px; font-size: 0.8rem; font-weight: 700;">{row['Registros']} Regs</span>
+                            <span class="hotspot-pill">{row['Registros']} Registros</span>
                         </div>
                     """, unsafe_allow_html=True)
-                st.metric("Cobertura", f"{len(map_data)} / 42 Municipios")
+                
+                st.markdown("---")
+                # Resumen de actividad por zona (Ejemplo)
+                st.write("**Resumen de Cobertura**")
+                st.metric("Municipios Cubiertos", f"{len(map_data)} / 42")
+                st.metric("Promedio por Municipio", f"{int(map_data['Registros'].mean())}")
 
-            # --- RANKING Y TENDENCIA ---
+            # --- 4. RANKING Y TENDENCIA ---
             st.markdown("---")
             c_rank, c_trend = st.columns([1, 1.5])
             
@@ -321,7 +385,10 @@ if check_auth():
                 for i, row in ranking.head(8).iterrows():
                     st.markdown(f"""
                         <div class="rank-item">
-                            <div class="rank-info"><div class="rank-num">{i+1}</div><span class="rank-name">{row['Líder'].upper()}</span></div>
+                            <div class="rank-info">
+                                <div class="rank-num">{i+1}</div>
+                                <span class="rank-name">{row['Líder'].upper()}</span>
+                            </div>
                             <span class="rank-badge">{row['Total']} regs</span>
                         </div>
                     """, unsafe_allow_html=True)
@@ -337,7 +404,7 @@ if check_auth():
         st.title("🔍 Explorador de Registros")
         df = get_data()
         if not df.empty:
-            q = st.text_input("Buscar por nombre, cédula o municipio...").upper()
+            q = st.text_input("Buscar...").upper()
             if q:
                 res = df[df.astype(str).apply(lambda x: q in x.values, axis=1)]
                 st.dataframe(res, use_container_width=True)
