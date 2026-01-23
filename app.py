@@ -127,7 +127,7 @@ def save_data(data_dict):
         return True
     except: return False
 
-# --- NORMALIZACIÓN DE MUNICIPIOS (VITAL PARA EL MATCH DEL DIBUJO) ---
+# --- NORMALIZACIÓN DE MUNICIPIOS ---
 def normalizar_muni(muni):
     m = str(muni).upper().strip()
     mapping = {
@@ -175,17 +175,23 @@ def normalizar_muni(muni):
     }
     return mapping.get(m, m)
 
-# --- CARGA DEL DIBUJO DEL MAPA (GEOJSON RESILIENTE) ---
+# --- CARGA DEL DIBUJO DEL MAPA (CON FALLBACK RESILIENTE) ---
 @st.cache_data(ttl=3600)
 def load_valle_geojson():
-    # Usamos jsDelivr como CDN estable para archivos JSON
-    url = "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json"
-    try:
-        r = requests.get(url, timeout=10, verify=False)
-        if r.status_code == 200:
-            return r.json()
-    except:
-        return None
+    # Intentamos con múltiples fuentes estables
+    urls = [
+        "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json",
+        "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json",
+        "https://gist.githubusercontent.com/john-guerra/43c7656821069d00dcbc/raw/be381f21d3f381c8286a0740685970c6a51d45a9/valle.json"
+    ]
+    for url in urls:
+        try:
+            r = requests.get(url, timeout=10, verify=False)
+            if r.status_code == 200:
+                return r.json()
+        except:
+            continue
+    return None
 
 # --- AUTH ---
 def check_auth():
@@ -229,10 +235,9 @@ if check_auth():
         st.session_state.clear()
         st.rerun()
 
-    # --- REGISTRO ---
     if opcion == "📝 Registro":
         st.title("🗳️ Nuevo Registro de Ciudadano")
-        with st.form(key=f"form_pulse_{st.session_state.f_reset}", clear_on_submit=False):
+        with st.form(key=f"form_pulse_{st.session_state.f_reset}"):
             c1, c2 = st.columns(2)
             with c1:
                 nom = st.text_input("Nombre Completo")
@@ -248,19 +253,18 @@ if check_auth():
             if st.form_submit_button("GUARDAR REGISTRO"):
                 if nom and ced and tel:
                     if save_data({"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dire.upper(),"barrio":bar.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}):
-                        st.success("✅ ¡Registro guardado!")
+                        st.success("✅ ¡Registro guardado exitosamente!")
                         st.session_state.f_reset += 1 
                         time.sleep(1)
                         st.rerun()
                 else: st.warning("Complete Nombre, Cédula y Teléfono")
 
-    # --- ESTADÍSTICAS ---
     elif opcion == "📊 Estadísticas":
         df = get_data()
         if not df.empty:
             st.title("Pulse Analytics | Gestión Valle del Cauca")
             
-            # 1. META HERO
+            # --- META ---
             total = len(df)
             perc = min((total / META_REGISTROS) * 100, 100)
             st.markdown(f"""
@@ -279,7 +283,7 @@ if check_auth():
                 </div>
             """, unsafe_allow_html=True)
 
-            # 2. KPIs
+            # --- KPIs ---
             hoy = datetime.now()
             df['F_S'] = df['Fecha Registro'].dt.date
             v_hoy = len(df[df['F_S'] == hoy.date()])
@@ -290,48 +294,49 @@ if check_auth():
             for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
                 col.markdown(f"""<div class="pulse-card"><div class="pulse-label">{lab}</div><div class="pulse-value">{val:,}</div></div>""", unsafe_allow_html=True)
 
-            # 3. MAPA DE COROPLETAS (DIBUJO VECTORIAL)
+            # --- MAPA ---
             st.markdown("<br>", unsafe_allow_html=True)
             c_map, c_rank = st.columns([1.6, 1])
             
             with c_map:
                 st.subheader("🗺️ Mapa de Coropletas Territorial")
                 m_df = df.copy()
-                # Aplicamos la normalización estricta para que el ID coincida con el dibujo
                 m_df['Municipio_Map'] = m_df['Ciudad'].apply(normalizar_muni)
                 map_data = m_df['Municipio_Map'].value_counts().reset_index()
                 map_data.columns = ['Municipio', 'Registros']
                 
                 geojson = load_valle_geojson()
                 if geojson:
-                    # Creamos el mapa de coropletas real
+                    # MAPA DE COROPLETAS REAL
                     fig = px.choropleth(
                         map_data, 
                         geojson=geojson, 
                         locations='Municipio',
-                        featureidkey="properties.name", # Llave de unión interna del dibujo
+                        featureidkey="properties.name", 
                         color='Registros',
                         color_continuous_scale="Reds", 
                         template="plotly_white",
                         hover_name="Municipio"
                     )
-                    # Forzamos la visualización solo del dibujo (sin fondo de mapa mundial)
-                    fig.update_geos(
-                        fitbounds="locations", 
-                        visible=False,
-                        projection_type="mercator"
-                    )
-                    fig.update_layout(
-                        margin={"r":0,"t":0,"l":0,"b":0}, 
-                        height=580, 
-                        coloraxis_showscale=True,
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        plot_bgcolor='rgba(0,0,0,0)'
-                    )
+                    fig.update_geos(fitbounds="locations", visible=False)
+                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550, coloraxis_showscale=True)
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 else:
-                    st.error("⚠️ No se pudo descargar el dibujo territorial. Mostrando tabla de datos:")
-                    st.dataframe(map_data, use_container_width=True, hide_index=True)
+                    # FALLBACK SI EL SERVIDOR BLOQUEA EL JSON: MAPA GEOGRÁFICO DE PUNTOS
+                    st.error("Utilizando visualización de respaldo geográfica.")
+                    # Coordenadas centroide para los municipios principales si falla el dibujo
+                    coords = {
+                        'GUADALAJARA DE BUGA': [3.9009, -76.3008], 'SANTIAGO DE CALI': [3.4516, -76.5320],
+                        'PALMIRA': [3.5394, -76.3036], 'TULUÁ': [4.0847, -76.1954], 'JAMUNDÍ': [3.2612, -76.5350]
+                    }
+                    map_data['lat'] = map_data['Municipio'].apply(lambda x: coords.get(x, [3.9, -76.3])[0])
+                    map_data['lon'] = map_data['Municipio'].apply(lambda x: coords.get(x, [3.9, -76.3])[1])
+                    
+                    fig = px.scatter_mapbox(map_data, lat="lat", lon="lon", size="Registros", color="Registros",
+                                          color_continuous_scale="Reds", size_max=40, zoom=8,
+                                          mapbox_style="carto-positron", hover_name="Municipio")
+                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
+                    st.plotly_chart(fig, use_container_width=True)
 
             with c_rank:
                 st.subheader("🏆 TOP Líderes")
@@ -346,11 +351,11 @@ if check_auth():
                     """, unsafe_allow_html=True)
                 
                 st.markdown("<br>", unsafe_allow_html=True)
-                sel_lider = st.selectbox("Detalle por Líder:", ["-- Seleccionar --"] + list(ranking['Líder']))
+                sel_lider = st.selectbox("Explorar líder:", ["-- Seleccionar --"] + list(ranking['Líder']))
                 if sel_lider != "-- Seleccionar --":
                     st.dataframe(df[df['Registrado Por'] == sel_lider][['Nombre', 'Ciudad']].tail(10), use_container_width=True, hide_index=True)
 
-            # 4. TENDENCIA
+            # --- TENDENCIA ---
             st.markdown("---")
             st.subheader("📈 Ritmo de Crecimiento")
             trend = df.groupby('F_S').size().reset_index(name='Ingresos')
