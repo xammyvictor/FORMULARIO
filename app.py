@@ -9,7 +9,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import requests
-import numpy as np
 
 # --- CONFIGURACIÓN GENERAL ---
 BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
@@ -75,6 +74,7 @@ st.markdown("""
         border-radius: 24px;
         border: 1px solid #F1F5F9;
         box-shadow: var(--pulse-card-shadow);
+        transition: transform 0.2s;
     }
     .kpi-label { color: var(--pulse-slate); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
     .kpi-val { color: var(--pulse-dark); font-size: 2.4rem; font-weight: 800; line-height: 1; }
@@ -90,8 +90,11 @@ st.markdown("""
         border-radius: 18px;
         margin-bottom: 10px;
         border: 1px solid #F1F5F9;
+        transition: all 0.2s;
     }
-    .rank-num { width: 32px; height: 32px; background: #FCE4EC; color: var(--pulse-pink); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.8rem; margin-right: 12px; }
+    .rank-item:hover { transform: translateX(5px); border-color: var(--pulse-pink); }
+    .rank-info { display: flex; align-items: center; gap: 12px; }
+    .rank-num { width: 32px; height: 32px; background: #FCE4EC; color: var(--pulse-pink); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.8rem; }
     .rank-name { font-weight: 700; color: #1E293B; font-size: 0.95rem; }
     .rank-badge { background: #F8FAFC; color: #64748B; padding: 6px 14px; border-radius: 12px; font-weight: 700; font-size: 0.8rem; border: 1px solid #E2E8F0; }
 
@@ -137,7 +140,7 @@ def save_data(data_dict):
         return True
     except: return False
 
-# --- NORMALIZACIÓN DE MUNICIPIOS ---
+# --- NORMALIZACIÓN DE MUNICIPIOS (SOLUCIÓN AL MAPA) ---
 def normalizar_para_mapa(muni):
     m = str(muni).upper().strip()
     mapping = {
@@ -184,6 +187,8 @@ def normalizar_para_mapa(muni):
 # --- AUTH ---
 def check_auth():
     if "logged_in" not in st.session_state: st.session_state.logged_in = False
+    
+    # Manejo de Referidos
     params = st.query_params
     if "ref" in params and "ref_checked" not in st.session_state:
         st.session_state.logged_in = True
@@ -219,12 +224,13 @@ if check_auth():
     st.sidebar.markdown(f"<div style='background:#F1F5F9; padding:20px; border-radius:18px; margin-bottom:20px;'><p style='margin:0; font-size:0.75rem; font-weight:700; color:#64748B;'>SESIÓN PULSE</p><p style='margin:0; font-size:1.1rem; font-weight:800; color:#0F172A;'>{usuario.upper()}</p></div>", unsafe_allow_html=True)
     opcion = st.sidebar.radio("MENÚ PRINCIPAL", ["📝 Registro", "📊 Estadísticas", "🔍 Búsqueda"] if es_admin else ["📝 Registro"])
     
-    if st.sidebar.button("Salir"):
+    if st.sidebar.button("Salir del Sistema"):
         st.session_state.clear()
         st.rerun()
 
+    # --- REGISTRO ---
     if opcion == "📝 Registro":
-        st.title("🗳️ Nuevo Registro")
+        st.title("🗳️ Nuevo Registro de Ciudadano")
         with st.form(key=f"form_pulse_{st.session_state.f_reset}", clear_on_submit=False):
             c1, c2 = st.columns(2)
             with c1:
@@ -238,21 +244,22 @@ if check_auth():
             ciu = st.text_input("Municipio", value="BUGA")
             pue = st.text_input("Puesto (Opcional)")
             
-            if st.form_submit_button("GUARDAR REGISTRO"):
+            if st.form_submit_button("GUARDAR EN BASE DE DATOS"):
                 if nom and ced and tel:
                     if save_data({"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dir.upper(),"barrio":bar.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}):
-                        st.success("¡Registro guardado!")
+                        st.success("¡Registro guardado exitosamente!")
                         st.session_state.f_reset += 1
                         time.sleep(1)
                         st.rerun()
-                else: st.warning("Complete Nombre, Cédula y Teléfono")
+                else: st.warning("Por favor complete Nombre, Cédula y Teléfono")
 
+    # --- ESTADÍSTICAS ---
     elif opcion == "📊 Estadísticas":
         df = get_data()
         if not df.empty:
             st.title("Pulse Analytics | Valle del Cauca")
             
-            # --- 1. HERO META ---
+            # 1. HERO META (PROGRESO)
             total = len(df)
             perc = min((total / META_REGISTROS) * 100, 100)
             st.markdown(f"""
@@ -261,99 +268,112 @@ if check_auth():
                         <div>
                             <p class="hero-label">Progreso de Gestión Global</p>
                             <h1 class="hero-value">{total:,}</h1>
+                            <p style="margin:0; opacity:0.6; font-size:0.9rem;">Registros procesados en tiempo real</p>
                         </div>
                         <div style="text-align:right;">
                             <span class="hero-perc">{perc:.1f}%</span>
-                            <p style="margin:0; opacity:0.6; font-size:0.8rem;">Meta: {META_REGISTROS:,}</p>
+                            <p style="margin:0; opacity:0.6; font-size:0.8rem;">de {META_REGISTROS:,} objetivo</p>
                         </div>
                     </div>
-                    <div class="pulse-progress-track"><div class="pulse-progress-fill" style="width: {perc}%;"></div></div>
+                    <div class="pulse-progress-track">
+                        <div class="pulse-progress-fill" style="width: {perc}%;"></div>
+                    </div>
                 </div>
             """, unsafe_allow_html=True)
 
-            # --- 2. KPIs ---
+            # 2. KPIs TEMPORALES
             hoy = datetime.now()
             df['F_S'] = df['Fecha Registro'].dt.date
-            v_hoy = len(df[df['F_S'] == hoy.date()])
-            v_8d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=8))])
-            v_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
+            m_hoy = len(df[df['F_S'] == hoy.date()])
+            m_8d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=8))])
+            m_15d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=15))])
+            m_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
 
             k1, k2, k3, k4 = st.columns(4)
-            for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
-                col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
+            metrics_data = [("Hoy", m_hoy), ("8 días", m_8d), ("15 días", m_15d), ("30 días", m_30d)]
+            for col, (lab, val) in zip([k1, k2, k3, k4], metrics_data):
+                col.markdown(f"""
+                    <div class="pulse-kpi-card">
+                        <div class="kpi-label">{lab}</div>
+                        <div class="kpi-val">{val:,}</div>
+                        <div class="kpi-trend"><span>▲</span> Crecimiento</div>
+                    </div>
+                """, unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- 3. MAPA OPTIMIZADO Y RANKING ---
+            # 3. MAPA Y LEADERBOARD (RANKING)
             col_map, col_rank = st.columns([1.6, 1])
             
             with col_map:
-                st.subheader("📍 Mapa de Calor Territorial")
+                st.subheader("📍 Cobertura Territorial")
                 m_df = df.copy()
                 m_df['M_Map'] = m_df['Ciudad'].apply(normalizar_para_mapa)
                 map_data = m_df['M_Map'].value_counts().reset_index()
                 map_data.columns = ['Municipio', 'Registros']
-
-                # Optimizamos la escala: Aplicamos logaritmo para mejorar contraste si hay outliers
-                map_data['Registros_Log'] = np.log1p(map_data['Registros'])
-
+                
                 try:
                     geojson_url = "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json"
                     response = requests.get(geojson_url)
                     geojson_data = response.json()
                     
-                    # Usamos una paleta divergente/secuencial con alto contraste
                     fig = px.choropleth(
-                        map_data, 
-                        geojson=geojson_data, 
-                        locations='Municipio',
-                        featureidkey="properties.name", 
-                        color='Registros', # Mostramos el valor real
-                        color_continuous_scale="Magma", # Paleta de alto contraste (negro-purpura-naranja)
-                        template="plotly_white",
-                        hover_data={'Municipio': True, 'Registros': True}
+                        map_data, geojson=geojson_data, locations='Municipio',
+                        featureidkey="properties.name", color='Registros',
+                        color_continuous_scale="RdPu", template="plotly_white"
                     )
                     fig.update_geos(fitbounds="locations", visible=False)
-                    fig.update_layout(
-                        margin={"r":0,"t":0,"l":0,"b":0}, 
-                        height=580, 
-                        coloraxis_colorbar=dict(
-                            title="Registros",
-                            thicknessmode="pixels", thickness=15,
-                            lenmode="pixels", len=300,
-                            yanchor="top", y=1,
-                            ticks="outside"
-                        )
-                    )
+                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=580, coloraxis_showscale=False)
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 except:
-                    st.error("Error cargando mapa territorial.")
+                    st.error("Error cargando mapa. Mostrando resumen de municipios:")
+                    st.dataframe(map_data, use_container_width=True, hide_index=True)
 
             with col_rank:
                 st.subheader("🏆 TOP 10 Líderes")
                 ranking = df['Registrado Por'].value_counts().reset_index()
                 ranking.columns = ['Líder', 'Total']
+                
                 for i, row in ranking.head(10).iterrows():
-                    st.markdown(f"""<div class="rank-item"><div class="rank-info"><div class="rank-num">{i+1}</div><span class="rank-name">{row['Líder'].upper()}</span></div><span class="rank-badge">{row['Total']} regs</span></div>""", unsafe_allow_html=True)
+                    st.markdown(f"""
+                        <div class="rank-item">
+                            <div class="rank-info">
+                                <div class="rank-num">{i+1}</div>
+                                <span class="rank-name">{row['Líder'].upper()}</span>
+                            </div>
+                            <span class="rank-badge">{row['Total']} regs</span>
+                        </div>
+                    """, unsafe_allow_html=True)
                 
                 st.markdown("<br>", unsafe_allow_html=True)
-                lider_sel = st.selectbox("🎯 Detalle por Líder:", ["Todos"] + list(ranking['Líder']))
-                if lider_sel != "Todos":
-                    st.dataframe(df[df['Registrado Por'] == lider_sel][['Nombre', 'Ciudad']].tail(10), use_container_width=True, hide_index=True)
+                lider_sel = st.selectbox("🎯 Filtrar por Líder:", ["Todos los líderes"] + list(ranking['Líder']))
+                if lider_sel != "Todos los líderes":
+                    st.write(f"Últimos de **{lider_sel.upper()}**:")
+                    st.dataframe(df[df['Registrado Por'] == lider_sel][['Nombre', 'Cédula', 'Ciudad']].tail(10), use_container_width=True, hide_index=True)
 
-            # --- 4. TENDENCIA ---
+            # 4. TENDENCIA Y CHIPS
             st.markdown("---")
-            st.subheader("📈 Actividad Histórica")
-            trend = df.groupby('F_S').size().reset_index(name='Ingresos')
-            fig_trend = px.area(trend, x='F_S', y='Ingresos', color_discrete_sequence=['#E91E63'])
-            fig_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=300, xaxis_title=None, yaxis_title=None)
-            st.plotly_chart(fig_trend, use_container_width=True)
+            c_trend, c_chips = st.columns([2, 1])
+            with c_trend:
+                st.subheader("📈 Tendencia Diaria de Ingresos")
+                trend = df.groupby('F_S').size().reset_index(name='Ingresos')
+                fig_trend = px.area(trend, x='F_S', y='Ingresos', color_discrete_sequence=['#E91E63'])
+                fig_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=300, xaxis_title=None, yaxis_title=None)
+                st.plotly_chart(fig_trend, use_container_width=True)
+            with c_chips:
+                st.subheader("👥 Equipo Activo")
+                activos = sorted(df['Registrado Por'].unique())
+                chips_html = "".join([f'<span style="background:#F1F5F9; padding:8px 16px; border-radius:12px; margin:4px; font-weight:600; display:inline-block; border:1px solid #E2E8F0; color:#475569;">{l.upper()}</span>' for l in activos])
+                st.markdown(f"<div style='margin-top:15px;'>{chips_html}</div>", unsafe_allow_html=True)
 
+        else: st.info("Sincronizando con Google Sheets...")
+
+    # --- BÚSQUEDA ---
     elif opcion == "🔍 Búsqueda":
         st.title("🔍 Explorador de Registros")
         df = get_data()
         if not df.empty:
-            q = st.text_input("Buscar...").upper()
+            q = st.text_input("Buscar por Nombre, Cédula o Ciudad").upper()
             if q:
                 res = df[df.astype(str).apply(lambda x: q in x.values, axis=1)]
                 st.dataframe(res, use_container_width=True)
