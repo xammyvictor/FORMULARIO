@@ -3,7 +3,7 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import time
-import plotly.express as px
+import pydeck as pdk
 from datetime import datetime, timedelta
 import json
 
@@ -30,7 +30,6 @@ st.markdown("""
     * { font-family: 'Plus Jakarta Sans', sans-serif; }
     .stApp { background-color: var(--pulse-bg); }
     
-    /* KPI Cards styling */
     .pulse-card {
         background: white; padding: 24px; border-radius: 24px;
         border: 1px solid #F1F5F9; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
@@ -39,7 +38,6 @@ st.markdown("""
     .pulse-label { color: var(--pulse-slate); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
     .pulse-value { color: var(--pulse-dark); font-size: 2.2rem; font-weight: 800; margin: 8px 0; line-height: 1; }
     
-    /* Hero Meta Section */
     .hero-section {
         background: var(--pulse-dark); color: white; padding: 40px;
         border-radius: 32px; margin-bottom: 35px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
@@ -47,7 +45,9 @@ st.markdown("""
     .hero-big-num { font-size: 4rem; font-weight: 800; color: white !important; line-height: 1; }
     .hero-perc { font-size: 2.5rem; font-weight: 800; color: var(--pulse-pink); }
     
-    /* Ranking styling */
+    .progress-track { background: rgba(255, 255, 255, 0.1); height: 16px; border-radius: 20px; width: 100%; margin-top: 25px; overflow: hidden; }
+    .progress-fill { background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%); height: 100%; border-radius: 20px; transition: width 1.5s ease; }
+    
     .rank-item {
         display: flex; justify-content: space-between; align-items: center;
         padding: 16px; background: white; border-radius: 18px; margin-bottom: 10px; border: 1px solid #F1F5F9;
@@ -60,24 +60,23 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- DIBUJO REAL DEL VALLE DEL CAUCA (GEOJSON INTEGRADO) ---
-# He incluido las fronteras reales simplificadas de los municipios principales
-def get_valle_geojson():
+# --- DIBUJO REAL DEL VALLE DEL CAUCA (GEOJSON INTEGRADO PARA PYDECK) ---
+def get_valle_geojson_data():
     return {
         "type": "FeatureCollection",
         "features": [
-            {"type": "Feature", "id": "SANTIAGO DE CALI", "properties": {"name": "SANTIAGO DE CALI"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.54, 3.48], [-76.45, 3.52], [-76.42, 3.42], [-76.46, 3.32], [-76.58, 3.34], [-76.54, 3.48]]]}},
-            {"type": "Feature", "id": "GUADALAJARA DE BUGA", "properties": {"name": "GUADALAJARA DE BUGA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.32, 3.95], [-76.10, 3.98], [-76.12, 3.82], [-76.25, 3.84], [-76.32, 3.95]]]}},
-            {"type": "Feature", "id": "PALMIRA", "properties": {"name": "PALMIRA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.35, 3.65], [-76.05, 3.68], [-76.02, 3.45], [-76.25, 3.42], [-76.35, 3.65]]]}},
-            {"type": "Feature", "id": "TULUÁ", "properties": {"name": "TULUÁ"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.22, 4.15], [-75.95, 4.18], [-75.92, 4.02], [-76.15, 3.98], [-76.22, 4.15]]]}},
-            {"type": "Feature", "id": "JAMUNDÍ", "properties": {"name": "JAMUNDÍ"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.65, 3.32], [-76.52, 3.32], [-76.48, 3.15], [-76.62, 3.10], [-76.65, 3.32]]]}},
-            {"type": "Feature", "id": "CARTAGO", "properties": {"name": "CARTAGO"}, "geometry": {"type": "Polygon", "coordinates": [[[-75.95, 4.80], [-75.82, 4.82], [-75.80, 4.68], [-75.92, 4.65], [-75.95, 4.80]]]}},
-            {"type": "Feature", "id": "YUMBO", "properties": {"name": "YUMBO"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.55, 3.65], [-76.42, 3.65], [-76.40, 3.52], [-76.52, 3.48], [-76.55, 3.65]]]}},
-            {"type": "Feature", "id": "BUENAVENTURA", "properties": {"name": "BUENAVENTURA"}, "geometry": {"type": "Polygon", "coordinates": [[[-77.45, 3.95], [-76.95, 4.10], [-76.85, 3.75], [-77.35, 3.60], [-77.45, 3.95]]]}},
-            {"type": "Feature", "id": "ZARZAL", "properties": {"name": "ZARZAL"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.10, 4.45], [-75.98, 4.45], [-75.95, 4.35], [-76.08, 4.35], [-76.10, 4.45]]]}},
-            {"type": "Feature", "id": "ROLDANILLO", "properties": {"name": "ROLDANILLO"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.20, 4.48], [-76.10, 4.48], [-76.08, 4.38], [-76.18, 4.38], [-76.20, 4.48]]]}},
-            {"type": "Feature", "id": "FLORIDA", "properties": {"name": "FLORIDA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.25, 3.38], [-76.02, 3.38], [-76.00, 3.25], [-76.22, 3.25], [-76.25, 3.38]]]}},
-            {"type": "Feature", "id": "CANDELARIA", "properties": {"name": "CANDELARIA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.42, 3.42], [-76.25, 3.42], [-76.28, 3.32], [-76.44, 3.32], [-76.42, 3.42]]]}}
+            {"type": "Feature", "properties": {"name": "SANTIAGO DE CALI"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.54, 3.48], [-76.45, 3.52], [-76.42, 3.42], [-76.46, 3.32], [-76.58, 3.34], [-76.54, 3.48]]]}},
+            {"type": "Feature", "properties": {"name": "GUADALAJARA DE BUGA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.32, 3.95], [-76.10, 3.98], [-76.12, 3.82], [-76.25, 3.84], [-76.32, 3.95]]]}},
+            {"type": "Feature", "properties": {"name": "PALMIRA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.35, 3.65], [-76.10, 3.68], [-76.05, 3.45], [-76.25, 3.42], [-76.35, 3.65]]]}},
+            {"type": "Feature", "properties": {"name": "TULUÁ"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.22, 4.15], [-75.95, 4.18], [-75.92, 4.02], [-76.15, 3.98], [-76.22, 4.15]]]}},
+            {"type": "Feature", "properties": {"name": "JAMUNDÍ"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.65, 3.32], [-76.52, 3.32], [-76.48, 3.15], [-76.62, 3.10], [-76.65, 3.32]]]}},
+            {"type": "Feature", "properties": {"name": "CARTAGO"}, "geometry": {"type": "Polygon", "coordinates": [[[-75.95, 4.80], [-75.82, 4.82], [-75.80, 4.68], [-75.92, 4.65], [-75.95, 4.80]]]}},
+            {"type": "Feature", "properties": {"name": "YUMBO"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.55, 3.65], [-76.42, 3.65], [-76.40, 3.52], [-76.52, 3.48], [-76.55, 3.65]]]}},
+            {"type": "Feature", "properties": {"name": "BUENAVENTURA"}, "geometry": {"type": "Polygon", "coordinates": [[[-77.45, 3.95], [-76.95, 4.10], [-76.85, 3.75], [-77.35, 3.60], [-77.45, 3.95]]]}},
+            {"type": "Feature", "properties": {"name": "ZARZAL"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.10, 4.45], [-75.98, 4.45], [-75.95, 4.35], [-76.08, 4.35], [-76.10, 4.45]]]}},
+            {"type": "Feature", "properties": {"name": "ROLDANILLO"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.20, 4.48], [-76.10, 4.48], [-76.08, 4.38], [-76.18, 4.38], [-76.20, 4.48]]]}},
+            {"type": "Feature", "properties": {"name": "FLORIDA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.25, 3.38], [-76.02, 3.38], [-76.00, 3.25], [-76.22, 3.25], [-76.25, 3.38]]]}},
+            {"type": "Feature", "properties": {"name": "CANDELARIA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.42, 3.42], [-76.25, 3.42], [-76.28, 3.32], [-76.44, 3.32], [-76.42, 3.42]]]}}
         ]
     }
 
@@ -226,38 +225,65 @@ if check_auth():
             for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("Municipios", df['Ciudad'].nunique()), ("Líderes", df['Registrado Por'].nunique()), ("Objetivo", META_REGISTROS)]):
                 col.markdown(f"""<div class="pulse-card"><div class="pulse-label">{lab}</div><div class="pulse-value">{val:,}</div></div>""", unsafe_allow_html=True)
 
-            # --- MAPA DE COROPLETAS (DIBUJO VECTORIAL) ---
+            # --- MAPA DE COROPLETAS CON PYDECK ---
             st.markdown("<br>", unsafe_allow_html=True)
             c_map, c_rank = st.columns([1.6, 1])
             
             with c_map:
-                st.subheader("📍 Mapa de Coropletas Territorial")
+                st.subheader("📍 Mapa de Coropletas (Pydeck Native)")
+                
+                # Procesar datos
                 m_df = df.copy()
                 m_df['M_Map'] = m_df['Ciudad'].apply(normalizar_para_mapa)
-                map_data = m_df['M_Map'].value_counts().reset_index()
-                map_data.columns = ['Municipio', 'Registros']
+                counts = m_df['M_Map'].value_counts().to_dict()
                 
-                geojson = get_valle_geojson()
+                # Inyectar datos en el GeoJSON
+                geojson = get_valle_geojson_data()
+                max_regs = max(counts.values()) if counts else 1
                 
-                fig = px.choropleth(
-                    map_data, 
-                    geojson=geojson, 
-                    locations='Municipio',
-                    featureidkey="properties.name", 
-                    color='Registros',
-                    color_continuous_scale=["#FCE4EC", "#E91E63"], # Rosa Pulse
-                    template="plotly_white",
-                    hover_name="Municipio"
+                for feature in geojson['features']:
+                    m_name = feature['properties']['name']
+                    reg_count = counts.get(m_name, 0)
+                    feature['properties']['registros'] = reg_count
+                    # Calcular color (RGBA) - De rosa claro a rosa intenso
+                    intensity = (reg_count / max_regs) if max_regs > 0 else 0
+                    feature['properties']['fill_color'] = [233, 30, 99, int(50 + (intensity * 205))] # Pulse Pink con opacidad variable
+
+                # Configuración de Capa Pydeck
+                layer = pdk.Layer(
+                    "GeoJsonLayer",
+                    geojson,
+                    opacity=0.8,
+                    stroked=True,
+                    filled=True,
+                    extruded=True, # 3D opcional
+                    wireframe=True,
+                    get_elevation="registros * 100", # Elevación basada en registros
+                    get_fill_color="properties.fill_color",
+                    get_line_color=[255, 255, 255],
+                    line_width_min_pixels=1,
+                    pickable=True
                 )
-                fig.update_geos(fitbounds="locations", visible=False)
-                fig.update_layout(
-                    margin={"r":0,"t":0,"l":0,"b":0}, 
-                    height=580, 
-                    coloraxis_showscale=True,
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)'
+
+                # Vista inicial centrada en el Valle del Cauca
+                view_state = pdk.ViewState(
+                    latitude=3.8,
+                    longitude=-76.5,
+                    zoom=7.5,
+                    pitch=45,
+                    bearing=0
                 )
-                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+                # Renderizar Mapa
+                st.pydeck_chart(pdk.Deck(
+                    layers=[layer],
+                    initial_view_state=view_state,
+                    map_style="mapbox://styles/mapbox/light-v9", # Estilo limpio
+                    tooltip={
+                        "html": "<b>Municipio:</b> {name}<br/><b>Registros:</b> {registros}",
+                        "style": {"color": "white"}
+                    }
+                ))
 
             with c_rank:
                 st.subheader("🏆 TOP Líderes")
