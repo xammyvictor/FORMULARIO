@@ -17,7 +17,7 @@ BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
 META_REGISTROS = 12000
 
 st.set_page_config(
-    page_title="Maria Irma | Analytics Coropletas",
+    page_title="Maria Irma | Pulse Analytics",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -74,7 +74,7 @@ st.markdown("""
         background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%);
         height: 100%;
         border-radius: 20px;
-        transition: width 1.5s ease;
+        transition: width 1.5s ease-in-out;
     }
 
     /* Estilo de Ranking */
@@ -87,6 +87,7 @@ st.markdown("""
         font-weight: 700;
         border: 1px solid #F8BBD0;
     }
+    .stButton>button { border-radius: 12px !important; background: var(--pulse-pink) !important; color: white !important; font-weight: 700 !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -126,10 +127,10 @@ def save_data(data_dict):
         return True
     except: return False
 
-# --- NORMALIZACIÓN DE MUNICIPIOS (LLAVE PARA EL MAPA DE COROPLETAS) ---
+# --- NORMALIZACIÓN DE MUNICIPIOS (PARA MAPA DE COROPLETAS) ---
 def normalizar_muni(muni):
     m = str(muni).upper().strip()
-    # Mapeo para que coincida EXACTAMENTE con los nombres en el archivo GeoJSON (el dibujo)
+    # Este mapeo es VITAL para que los datos "encajen" con el dibujo GeoJSON
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
@@ -150,14 +151,35 @@ def normalizar_muni(muni):
         "GINEBRA": "GINEBRA",
         "LA UNION": "LA UNIÓN",
         "SEVILLA": "SEVILLA",
-        "CAICEDONIA": "CAICEDONIA"
+        "CAICEDONIA": "CAICEDONIA",
+        "ANSERMANUEVO": "ANSERMANUEVO",
+        "BOLIVAR": "BOLÍVAR",
+        "BUENAVENTURA": "BUENAVENTURA",
+        "BUGALAGRANDE": "BUGALAGRANDE",
+        "CANDELARIA": "CANDELARIA",
+        "DAGUA": "DAGUA",
+        "EL AGUILA": "EL ÁGUILA",
+        "EL CAIRO": "EL CAIRO",
+        "EL DOVIO": "EL DOVIO",
+        "LA CUMBRE": "LA CUMBRE",
+        "LA VICTORIA": "LA VICTORIA",
+        "OBANDO": "OBANDO",
+        "RESTREPO": "RESTREPO",
+        "RIOFRIO": "RIOFRIO",
+        "SAN PEDRO": "SAN PEDRO",
+        "TORO": "TORO",
+        "TRUJILLO": "TRUJILLO",
+        "ULLOA": "ULLOA",
+        "VERSALLES": "VERSALLES",
+        "VIJES": "VIJES",
+        "YOTOCO": "YOTOCO"
     }
     return mapping.get(m, m)
 
-# --- CARGA DEL GEOJSON (EL DIBUJO) ---
+# --- CARGA DEL GEOJSON (DIBUJO TERRITORIAL) ---
 @st.cache_data(ttl=3600)
 def load_valle_geojson():
-    # Fuente de alta disponibilidad para el dibujo de municipios del Valle del Cauca
+    # Usamos jsDelivr como fuente primaria por ser más estable que GitHub Raw
     url = "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json"
     try:
         r = requests.get(url, timeout=10, verify=False)
@@ -180,13 +202,13 @@ def check_auth():
         st.markdown("<div style='text-align:center; padding-top: 100px;'><h1>Pulse Login</h1></div>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 1.2, 1])
         with col2:
-            u = st.text_input("Usuario")
+            u = st.text_input("Usuario").lower().strip()
             p = st.text_input("Contraseña", type="password")
             if st.button("Entrar"):
                 creds = {"fabian": "1234", "xammy": "1234", "brayan": "1234", "diegomonta": "1234"}
-                if u.lower() in creds and creds[u.lower()] == p:
+                if u in creds and creds[u] == p:
                     st.session_state.logged_in = True
-                    st.session_state.user_name = u.lower()
+                    st.session_state.user_name = u
                     st.session_state.is_guest = False
                     st.rerun()
                 else: st.error("Acceso denegado")
@@ -210,8 +232,8 @@ if check_auth():
 
     # --- REGISTRO ---
     if opcion == "📝 Registro":
-        st.title("🗳️ Nuevo Registro")
-        with st.form(key=f"form_pulse_{st.session_state.f_reset}"):
+        st.title("🗳️ Nuevo Registro de Ciudadano")
+        with st.form(key=f"form_pulse_{st.session_state.f_reset}", clear_on_submit=False):
             c1, c2 = st.columns(2)
             with c1:
                 nom = st.text_input("Nombre Completo")
@@ -227,19 +249,19 @@ if check_auth():
             if st.form_submit_button("GUARDAR REGISTRO"):
                 if nom and ced and tel:
                     if save_data({"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dire.upper(),"barrio":bar.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}):
-                        st.success("✅ ¡Registro guardado!")
+                        st.success("✅ ¡Registro guardado exitosamente!")
                         st.session_state.f_reset += 1 
                         time.sleep(1)
                         st.rerun()
-                else: st.warning("Complete Nombre, Cédula y Teléfono")
+                else: st.warning("Por favor complete Nombre, Cédula y Teléfono")
 
     # --- ESTADÍSTICAS ---
     elif opcion == "📊 Estadísticas":
         df = get_data()
         if not df.empty:
-            st.title("Pulse Analytics | Mapa de Gestión Territorial")
+            st.title("Pulse Analytics | Dashboard Valle del Cauca")
             
-            # 1. PROGRESO META
+            # 1. META HERO
             total = len(df)
             perc = min((total / META_REGISTROS) * 100, 100)
             st.markdown(f"""
@@ -254,7 +276,7 @@ if check_auth():
                             <p style="margin:0; opacity:0.6; font-size:0.8rem;">Meta: {META_REGISTROS:,}</p>
                         </div>
                     </div>
-                    <div class="pulse-progress-track"><div class="progress-fill" style="width: {perc}%;"></div></div>
+                    <div class="progress-track"><div class="progress-fill" style="width: {perc}%;"></div></div>
                 </div>
             """, unsafe_allow_html=True)
 
@@ -269,12 +291,12 @@ if check_auth():
             for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
                 col.markdown(f"""<div class="pulse-card"><div class="pulse-label">{lab}</div><div class="pulse-value">{val:,}</div></div>""", unsafe_allow_html=True)
 
-            # 3. MAPA DE COROPLETAS (DIBUJO VECTORIAL)
+            # 3. MAPA DE COROPLETAS
             st.markdown("<br>", unsafe_allow_html=True)
             c_map, c_rank = st.columns([1.6, 1])
             
             with c_map:
-                st.subheader("🗺️ Mapa de Coropletas - Valle del Cauca")
+                st.subheader("🗺️ Mapa de Coropletas Territorial")
                 m_df = df.copy()
                 m_df['Municipio_Map'] = m_df['Ciudad'].apply(normalizar_muni)
                 map_data = m_df['Municipio_Map'].value_counts().reset_index()
@@ -282,18 +304,18 @@ if check_auth():
                 
                 geojson = load_valle_geojson()
                 if geojson:
-                    # Creamos el mapa de coropletas
+                    # Crear el dibujo territorial (Choropleth)
                     fig = px.choropleth(
                         map_data, 
                         geojson=geojson, 
                         locations='Municipio',
-                        featureidkey="properties.name", # Llave de unión entre datos y dibujo
+                        featureidkey="properties.name", # Llave crítica para unir datos con el dibujo
                         color='Registros',
                         color_continuous_scale="Reds", 
                         template="plotly_white",
                         hover_name="Municipio"
                     )
-                    # Configuramos para ver SOLO el dibujo (sin mapa mundial de fondo)
+                    # Forzar vista de solo el dibujo del departamento
                     fig.update_geos(
                         fitbounds="locations", 
                         visible=False,
@@ -301,15 +323,15 @@ if check_auth():
                     )
                     fig.update_layout(
                         margin={"r":0,"t":0,"l":0,"b":0}, 
-                        height=600, 
+                        height=580, 
                         coloraxis_showscale=True,
                         paper_bgcolor='rgba(0,0,0,0)',
                         plot_bgcolor='rgba(0,0,0,0)'
                     )
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 else:
-                    st.error("Error al cargar el dibujo territorial. Mostrando tabla de apoyo:")
-                    st.dataframe(map_data, use_container_width=True)
+                    st.error("Error al cargar el dibujo del mapa. Mostrando tabla de datos:")
+                    st.dataframe(map_data, use_container_width=True, hide_index=True)
 
             with c_rank:
                 st.subheader("🏆 TOP Líderes")
@@ -324,13 +346,13 @@ if check_auth():
                     """, unsafe_allow_html=True)
                 
                 st.markdown("<br>", unsafe_allow_html=True)
-                sel_lider = st.selectbox("Detalle por Líder:", ["-- Seleccionar --"] + list(ranking['Líder']))
+                sel_lider = st.selectbox("Explorar líder:", ["-- Seleccionar --"] + list(ranking['Líder']))
                 if sel_lider != "-- Seleccionar --":
                     st.dataframe(df[df['Registrado Por'] == sel_lider][['Nombre', 'Ciudad']].tail(10), use_container_width=True, hide_index=True)
 
             # 4. TENDENCIA
             st.markdown("---")
-            st.subheader("📈 Ritmo de Crecimiento")
+            st.subheader("📈 Actividad de Ingresos")
             trend = df.groupby('F_S').size().reset_index(name='Ingresos')
             fig_t = px.area(trend, x='F_S', y='Ingresos', color_discrete_sequence=['#E91E63'])
             fig_t.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=300, xaxis_title=None, yaxis_title=None)
