@@ -4,13 +4,14 @@ import gspread
 from google.oauth2.service_account import Credentials
 import time
 import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import requests
 import unicodedata
 import json
+import numpy as np
 
 # --- 1. CONFIGURACIÓN Y CONSTANTES ---
-# Enlace de tu repositorio (El código lo convierte automáticamente a RAW)
 URL_GITHUB_GEO = "https://github.com/xammyvictor/FORMULARIO/blob/main/co_2018_MGN_MPIO_POLITICO.geojson"
 META_REGISTROS = 12000
 USUARIOS_ADMIN = ["fabian", "xammy", "brayan"]
@@ -183,7 +184,6 @@ def save_data(data_dict):
 @st.cache_data(ttl=3600)
 def get_valle_geojson(url):
     """Descarga el GeoJSON completo y filtra el Valle del Cauca en tiempo real."""
-    # Convertir link de GitHub a link RAW
     raw_url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
     try:
         response = requests.get(raw_url, timeout=15)
@@ -192,10 +192,9 @@ def get_valle_geojson(url):
             valle_features = []
             for feature in data["features"]:
                 props = feature["properties"]
-                # Código DANE del Valle del Cauca es 76
                 if str(props.get("DPTO_CCDGO")) == "76":
                     m_name = normalizar(props.get("MPIO_CNMBR", ""))
-                    feature["id"] = m_name # Asignamos ID para el cruce de datos
+                    feature["id"] = m_name
                     valle_features.append(feature)
             
             if valle_features:
@@ -304,70 +303,86 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA RECONFIGURADO (FRONTERAS NEGRAS Y COLOREADO DINÁMICO) ---
+    # --- MAPA RECONFIGURADO (CON NOMBRES) ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📍 Concentración Territorial (Valle del Cauca)")
     
-    # Datos actuales de la base
     m_df = df.copy()
     m_df['ID_MPIO'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
     counts = m_df['ID_MPIO'].value_counts().reset_index()
     counts.columns = ['ID_MPIO', 'Registros']
     
-    c_map_view, c_map_stats = st.columns([2.2, 1])
+    c_map_view, c_map_stats = st.columns([2.5, 1])
     
     with c_map_view:
         geojson_data = get_valle_geojson(URL_GITHUB_GEO)
         if geojson_data:
-            # Creamos una lista base con TODOS los municipios del GeoJSON para asegurar que se dibujen sus fronteras
-            all_ids = [f["id"] for f in geojson_data["features"]]
-            df_base = pd.DataFrame({"ID_MPIO": all_ids})
+            all_features = geojson_data["features"]
+            all_ids = [f["id"] for f in all_features]
             
-            # Unimos con los conteos reales. Los que no tengan datos quedan con 0.
+            # Obtener centros aproximados para etiquetas
+            lats, lons, names = [], [], []
+            for f in all_features:
+                coords = f["geometry"]["coordinates"]
+                if f["geometry"]["type"] == "Polygon":
+                    coords_flat = np.array(coords[0])
+                else: # MultiPolygon
+                    coords_flat = np.array([c for sub in coords for c in sub[0]])
+                
+                lons.append(coords_flat[:, 0].mean())
+                lats.append(coords_flat[:, 1].mean())
+                names.append(f["id"])
+
+            df_base = pd.DataFrame({"ID_MPIO": all_ids})
             map_data_full = df_base.merge(counts, on='ID_MPIO', how='left').fillna(0)
             
-            # Choropleth estándar con fondo blanco
+            # Choropleth
             fig = px.choropleth(
                 map_data_full, 
                 geojson=geojson_data, 
                 locations='ID_MPIO',
                 color='Registros',
-                # Escala personalizada: 0 es blanco (no pintado), >0 usa degradado rosado
                 color_continuous_scale=[[0, 'white'], [0.0001, '#FCE4EC'], [1, '#E91E63']],
                 labels={'Registros': 'Total'}
             )
             
-            # Ocultar el resto del mundo y centrar en el Valle
+            # Capa de etiquetas de texto
+            fig.add_trace(go.Scattergeo(
+                lat=lats,
+                lon=lons,
+                text=names,
+                mode='text',
+                textfont=dict(size=8, color="black", family="Plus Jakarta Sans"),
+                hoverinfo='none',
+                showlegend=False
+            ))
+            
             fig.update_geos(
                 fitbounds="locations",
                 visible=False 
             )
             
-            # Demarcación de fronteras con línea negra
             fig.update_traces(
                 marker_line_width=1.2,
-                marker_line_color="black"
+                marker_line_color="black",
+                selector=dict(type='choropleth')
             )
             
             fig.update_layout(
                 margin={"r":0,"t":0,"l":0,"b":0}, 
-                height=650,
+                height=700,
                 paper_bgcolor="white",
                 plot_bgcolor="white",
-                coloraxis_colorbar=dict(
-                    title="REGISTROS", 
-                    thickness=20,
-                    len=0.5
-                )
+                coloraxis_colorbar=dict(title="REGISTROS", thickness=20, len=0.5)
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.error("⚠️ No se pudo cargar el archivo GeoJSON.")
+            st.error("⚠️ No se pudo cargar el mapa.")
             st.dataframe(counts, use_container_width=True)
 
     with c_map_stats:
         st.write("**🔥 Ranking Municipal**")
-        for _, row in counts.head(8).iterrows():
+        for _, row in counts.head(10).iterrows():
             st.markdown(f"""
                 <div class="rank-item" style="padding:12px; margin-bottom:8px;">
                     <span style="font-weight:600; font-size:0.9rem;">{row['ID_MPIO']}</span>
@@ -377,7 +392,6 @@ def view_estadisticas():
         
         st.markdown("---")
         st.metric("Municipios Activos", f"{len(counts)} / {MUNICIPIOS_VALLE_TOTAL}")
-        st.metric("Gestión Promedio", f"{int(counts['Registros'].mean()) if not counts.empty else 0}")
 
     # --- LEADERBOARD ---
     st.markdown("---")
