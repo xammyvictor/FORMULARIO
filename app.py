@@ -273,8 +273,8 @@ if check_auth():
                 
                 try:
                     # CARGA DEL ARCHIVO LOCAL DESDE TU REPOSITORIO
-                    if os.path.exists('valle_del_cauca.json'):
-                        with open('valle_del_cauca.json', 'r', encoding='utf-8') as f:
+                    if os.path.exists('valle.json'):
+                        with open('valle.json', 'r', encoding='utf-8') as f:
                             valle_geojson = json.load(f)
                         
                         # Renderizado del mapa
@@ -291,7 +291,7 @@ if check_auth():
                         fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
                         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                     else:
-                        st.error("⚠️ Archivo 'valle_del_cauca.json' no encontrado en el repositorio.")
+                        st.error("⚠️ Archivo 'valle.json' no encontrado en el repositorio.")
                         st.info("Asegúrate de haber subido el archivo JSON a la raíz de tu GitHub.")
                         st.dataframe(map_data)
                         
