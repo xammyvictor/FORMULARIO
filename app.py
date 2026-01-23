@@ -3,9 +3,10 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import time
-import plotly.express as px
 from datetime import datetime, timedelta
 import requests
+import folium
+from streamlit_folium import st_folium
 
 # --- CONFIGURACIÓN GENERAL ---
 META_REGISTROS = 12000
@@ -87,7 +88,6 @@ def get_data():
     except:
         return pd.DataFrame()
 
-# --- CARGA CACHEDA DEL MAPA (Crítico para evitar pantalla blanca) ---
 @st.cache_data(ttl=3600)
 def load_geojson():
     url = "https://raw.githubusercontent.com/finiterank/mapa-colombia-js/master/colombia-municipios.json"
@@ -115,34 +115,34 @@ def save_data(data_dict):
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
-    st.markdown("<div style='text-align:center; padding-top: 50px;'><h1>Pulse Analytics</h1><p>Ingreso al Sistema</p></div>", unsafe_allow_html=True)
+    st.markdown("<div style='text-align:center; padding-top: 50px;'><h1>Pulse Analytics</h1><p>Gestión Maria Irma</p></div>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1.2, 1])
     with c2:
         u = st.text_input("Usuario")
         p = st.text_input("Contraseña", type="password")
-        if st.button("Acceder", use_container_width=True):
+        if st.button("Entrar al Panel", use_container_width=True):
             creds = {"fabian": "1234", "xammy": "1234", "brayan": "1234", "diegomonta": "1234"}
             if u.lower() in creds and creds[u.lower()] == p:
                 st.session_state.logged_in = True
                 st.session_state.user_name = u.lower()
                 st.rerun()
-            else: st.error("Usuario o contraseña incorrectos")
+            else: st.error("Acceso Denegado")
     st.stop()
 
-# --- PANEL PRINCIPAL ---
+# --- APP ---
 usuario = st.session_state.user_name
 USUARIOS_ADMIN = ["fabian", "xammy", "brayan", "diegomonta"]
 es_admin = usuario.lower() in USUARIOS_ADMIN
 
 with st.sidebar:
     st.markdown(f"### Operador: {usuario.upper()}")
-    opcion = st.radio("Menú", ["📝 Registro", "📊 Estadísticas", "🔍 Búsqueda"] if es_admin else ["📝 Registro"])
-    if st.button("Cerrar Sesión"):
+    opcion = st.sidebar.radio("Navegación", ["📝 Registro", "📊 Estadísticas", "🔍 Búsqueda"] if es_admin else ["📝 Registro"])
+    if st.sidebar.button("Cerrar Sesión"):
         st.session_state.clear()
         st.rerun()
 
 if opcion == "📝 Registro":
-    st.title("🗳️ Nuevo Registro")
+    st.title("🗳️ Registro Ciudadano")
     if "f_res" not in st.session_state: st.session_state.f_res = 0
     with st.form(key=f"form_{st.session_state.f_res}"):
         c1, c2 = st.columns(2)
@@ -157,86 +157,83 @@ if opcion == "📝 Registro":
         ciu = st.text_input("Municipio", value="BUGA")
         pue = st.text_input("Puesto (Opcional)")
         
-        if st.form_submit_button("GUARDAR REGISTRO", use_container_width=True):
+        if st.form_submit_button("GUARDAR DATOS", use_container_width=True):
             if nom and ced and tel:
                 if save_data({"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dir.upper(),"barrio":bar.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}):
-                    st.success("¡Registro guardado!")
+                    st.success("¡Registro Exitoso!")
                     st.session_state.f_res += 1
                     time.sleep(1)
                     st.rerun()
-            else: st.warning("Nombre, Cédula y Teléfono son obligatorios")
+            else: st.warning("Por favor complete los campos obligatorios.")
 
 elif opcion == "📊 Estadísticas":
     df = get_data()
     if df.empty:
-        st.info("No hay datos todavía. Registra un ciudadano para ver las métricas.")
+        st.info("No hay datos cargados.")
     else:
-        st.title("Estadísticas de Gestión")
-        
-        # --- HERO METRICS ---
+        st.title("Panel Analytics")
         total = len(df)
         perc = min((total / META_REGISTROS) * 100, 100)
+        
         st.markdown(f"""
             <div class="pulse-hero">
-                <p class="hero-label">Total Gestión Global</p>
+                <p class="hero-label">Progreso de Meta Global</p>
                 <h1 class="hero-value">{total:,}</h1>
-                <p style="margin:0;"><span class="hero-perc">{perc:.1f}%</span> de la meta final ({META_REGISTROS:,})</p>
+                <p style="margin:0;"><span class="hero-perc">{perc:.1f}%</span> completado (Meta: {META_REGISTROS:,})</p>
             </div>
         """, unsafe_allow_html=True)
 
-        # KPIs
         k1, k2, k3 = st.columns(3)
         hoy = datetime.now().date()
         df['F_S'] = df['Fecha Registro'].dt.date
         v_hoy = len(df[df['F_S'] == hoy])
         
-        k1.markdown(f'<div class="pulse-kpi-card"><p class="kpi-label">Registros Hoy</p><p class="kpi-val">{v_hoy}</p></div>', unsafe_allow_html=True)
+        k1.markdown(f'<div class="pulse-kpi-card"><p class="kpi-label">Hoy</p><p class="kpi-val">{v_hoy}</p></div>', unsafe_allow_html=True)
         k2.markdown(f'<div class="pulse-kpi-card"><p class="kpi-label">Municipios</p><p class="kpi-val">{df["Ciudad"].nunique()}</p></div>', unsafe_allow_html=True)
-        k3.markdown(f'<div class="pulse-kpi-card"><p class="kpi-label">Meta Diaria</p><p class="kpi-val">150</p></div>', unsafe_allow_html=True)
+        k3.markdown(f'<div class="pulse-kpi-card"><p class="kpi-label">Líderes</p><p class="kpi-val">{df["Registrado Por"].nunique()}</p></div>', unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # --- SECCIÓN MAPA ---
-        st.subheader("📍 Concentración por Municipio")
+        # --- SECCIÓN MAPA (FOLIUM) ---
+        st.subheader("📍 Cobertura Territorial")
         
         m_df = df.copy()
-        m_df['M_MAP'] = m_df['Ciudad'].astype(str).str.upper().str.strip()
-        map_data = m_df['M_MAP'].value_counts().reset_index()
+        m_df['Ciudad'] = m_df['Ciudad'].astype(str).str.upper().str.strip()
+        map_data = m_df['Ciudad'].value_counts().reset_index()
         map_data.columns = ['Municipio', 'Registros']
         
-        col_map, col_list = st.columns([2, 1])
+        c_map, c_list = st.columns([2, 1])
         
-        with col_map:
+        with c_map:
             geo_data = load_geojson()
             if geo_data:
-                fig = px.choropleth(
-                    map_data, geojson=geo_data, locations='Municipio',
-                    featureidkey="properties.name", color='Registros',
-                    color_continuous_scale="Reds", template="plotly_white"
-                )
-                fig.update_geos(fitbounds="locations", visible=False)
-                fig.update_layout(
-                    margin={"r":0,"t":0,"l":0,"b":0}, 
-                    height=450,
-                    # FORZAR RENDERIZADO SVG PARA EVITAR PANTALLA BLANCA
-                    dragmode=False 
-                )
-                # Configuración para evitar problemas de WebGL
-                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False, 'staticPlot': False})
+                # Centro del mapa (Valle del Cauca aprox)
+                m = folium.Map(location=[3.8, -76.3], zoom_start=8, tiles="cartodbpositron")
+                
+                folium.Choropleth(
+                    geo_data=geo_data,
+                    name="choropleth",
+                    data=map_data,
+                    columns=["Municipio", "Registros"],
+                    key_on="feature.properties.name", # Coincide con tu JSON properties.name
+                    fill_color="YlOrRd",
+                    fill_opacity=0.7,
+                    line_opacity=0.2,
+                    legend_name="Número de Registros",
+                    highlight=True
+                ).add_to(m)
+                
+                # Renderizado del mapa
+                st_folium(m, width=700, height=500, returned_objects=[])
             else:
-                st.error("No se pudo cargar la capa del mapa. Verifica tu conexión.")
+                st.error("Error cargando capa geográfica.")
 
-        with col_list:
-            st.write("**Top 10 Municipios**")
-            for _, row in map_data.head(10).iterrows():
-                st.markdown(f"""
-                    <div class="rank-item">
-                        <span class="rank-name">{row['Municipio']}</span>
-                        <span class="hotspot-pill">{row['Registros']}</span>
-                    </div>
-                """, unsafe_allow_html=True)
+        with c_list:
+            st.write("**Top Municipios Activos**")
+            for _, r in map_data.head(10).iterrows():
+                st.markdown(f'<div class="rank-item"><span class="rank-name">{r["Municipio"]}</span><span class="hotspot-pill">{r["Registros"]}</span></div>', unsafe_allow_html=True)
 
-        # --- RANKING OPERADORES ---
+        # --- LEADERBOARD ---
         st.markdown("---")
         st.subheader("🏆 Leaderboard")
         rank = df['Registrado Por'].value_counts().reset_index()
@@ -252,10 +249,10 @@ elif opcion == "📊 Estadísticas":
             """, unsafe_allow_html=True)
 
 elif opcion == "🔍 Búsqueda":
-    st.title("🔍 Explorador de Registros")
+    st.title("🔍 Explorador")
     df = get_data()
     if not df.empty:
-        q = st.text_input("Buscar por nombre, cédula o municipio...").upper()
+        q = st.text_input("Buscar...").upper()
         if q:
             mask = df.astype(str).apply(lambda x: x.str.upper().str.contains(q)).any(axis=1)
             st.dataframe(df[mask], use_container_width=True)
