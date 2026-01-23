@@ -81,6 +81,27 @@ def get_municipality_coords():
         "GUACARÍ": {"lat": 3.7612, "lon": -76.3312}
     }
 
+# --- SILUETA DEL VALLE DEL CAUCA (FONDO) ---
+def get_valle_boundary():
+    # Coordenadas simplificadas para dibujar el contorno del departamento como fondo
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [-77.5, 3.0], [-77.0, 3.2], [-76.8, 3.0], [-76.4, 3.0], 
+                        [-75.8, 4.0], [-75.7, 5.0], [-76.2, 5.1], [-76.5, 4.8], 
+                        [-77.6, 4.2], [-77.5, 3.0]
+                    ]]
+                },
+                "properties": {"name": "Valle del Cauca"}
+            }
+        ]
+    }
+
 # --- CONEXIÓN GOOGLE SHEETS ---
 @st.cache_resource
 def get_google_sheet_client():
@@ -226,55 +247,57 @@ if check_auth():
             for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("Municipios", df['Ciudad'].nunique()), ("Líderes", df['Registrado Por'].nunique()), ("Objetivo", META_REGISTROS)]):
                 col.markdown(f"""<div class="pulse-card"><div class="pulse-label">{lab}</div><div class="pulse-value">{val:,}</div></div>""", unsafe_allow_html=True)
 
-            # --- MAPA DE BURBUJAS CON PYDECK ---
+            # --- MAPA DE BURBUJAS CON FONDO TERRITORIAL ---
             st.markdown("<br>", unsafe_allow_html=True)
             c_map, c_rank = st.columns([1.6, 1])
             
             with c_map:
-                st.subheader("📍 Concentración de Registros (Mapa de Burbujas)")
+                st.subheader("📍 Mapa de Concentración")
                 
-                # Procesar datos para las burbujas
+                # 1. Preparar datos de burbujas
                 m_df = df.copy()
                 m_df['M_Map'] = m_df['Ciudad'].apply(normalizar_para_mapa)
                 counts = m_df['M_Map'].value_counts().reset_index()
                 counts.columns = ['municipio', 'registros']
-                
-                # Unir con coordenadas
                 coords = get_municipality_coords()
                 counts['lat'] = counts['municipio'].map(lambda x: coords.get(x, {}).get('lat', 3.8))
                 counts['lon'] = counts['municipio'].map(lambda x: coords.get(x, {}).get('lon', -76.5))
                 
-                # Configurar Capa de Burbujas (ScatterplotLayer)
-                layer = pdk.Layer(
+                # 2. Capa de Fondo (Silueta del Valle)
+                valle_geojson = get_valle_boundary()
+                background_layer = pdk.Layer(
+                    "GeoJsonLayer",
+                    valle_geojson,
+                    opacity=0.1,
+                    stroked=True,
+                    filled=True,
+                    get_fill_color=[15, 23, 42], # Pulse Dark
+                    get_line_color=[15, 23, 42],
+                    line_width_min_pixels=2
+                )
+
+                # 3. Capa de Burbujas
+                bubble_layer = pdk.Layer(
                     "ScatterplotLayer",
                     counts,
                     get_position=["lon", "lat"],
-                    get_color=[233, 30, 99, 160], # Rosa Pulse con transparencia
-                    get_radius="registros * 100 + 1000", # Tamaño dinámico
+                    get_color=[233, 30, 99, 180], # Pulse Pink
+                    get_radius="registros * 150 + 2000", # Tamaño exagerado para visibilidad
                     pickable=True,
                     opacity=0.8,
                     stroked=True,
-                    filled=True,
-                    radius_min_pixels=5,
-                    radius_max_pixels=60,
-                    line_width_min_pixels=1,
+                    radius_min_pixels=8,
+                    radius_max_pixels=80,
                     get_line_color=[255, 255, 255]
                 )
 
-                # Vista inicial
-                view_state = pdk.ViewState(
-                    latitude=3.8,
-                    longitude=-76.5,
-                    zoom=7.5,
-                    pitch=0,
-                    bearing=0
-                )
-
-                # Renderizar Mapa de Burbujas
+                # 4. Renderizado
+                view_state = pdk.ViewState(latitude=3.8, longitude=-76.5, zoom=7.5, pitch=0)
+                
                 st.pydeck_chart(pdk.Deck(
-                    layers=[layer],
+                    layers=[background_layer, bubble_layer],
                     initial_view_state=view_state,
-                    map_style="mapbox://styles/mapbox/light-v10",
+                    map_style="light", # Usamos un estilo de sistema para mayor fiabilidad
                     tooltip={
                         "html": "<b>Municipio:</b> {municipio}<br/><b>Registros:</b> {registros}",
                         "style": {"color": "white", "font-family": "Plus Jakarta Sans"}
@@ -311,3 +334,4 @@ if check_auth():
                 st.dataframe(res, use_container_width=True)
             else:
                 st.dataframe(df.tail(100), use_container_width=True)
+                
