@@ -311,7 +311,7 @@ if check_auth():
                 map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots de Concentración"], horizontal=True)
                 
                 try:
-                    geojson_url = "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json"
+                    geojson_url = "https://raw.githubusercontent.com/santiblanko/colombia.geojson/master/mpio.json"
                     response = requests.get(geojson_url)
                     geojson_data = response.json()
                     
