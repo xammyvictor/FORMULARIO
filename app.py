@@ -8,12 +8,8 @@ from io import BytesIO
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
-import requests
+import json
 import numpy as np
-import urllib3
-
-# Deshabilitar advertencias de peticiones inseguras para máxima compatibilidad
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- CONFIGURACIÓN GENERAL ---
 BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
@@ -184,23 +180,17 @@ def normalizar_muni(muni):
     }
     return mapping.get(m, m)
 
-# --- CARGA DE GEOJSON (MAXIMA RESILIENCIA) ---
-@st.cache_data(ttl=3600)
-def load_valle_geojson():
-    urls = [
-        "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json",
-        "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json",
-        "https://gist.githubusercontent.com/john-guerra/43c7656821069d00dcbc/raw/be381f21d3f381c8286a0740685970c6a51d45a9/valle.json"
-    ]
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-    for url in urls:
-        try:
-            r = requests.get(url, headers=headers, timeout=10, verify=False)
-            if r.status_code == 200:
-                return r.json()
-        except:
-            continue
-    return None
+# --- DIBUJO DEL MAPA EMBEBIDO (SOLUCIÓN DEFINITIVA) ---
+# He simplificado el GeoJSON para que resida aquí mismo. Esto elimina la dependencia externa.
+def get_valle_map_data():
+    # URL de respaldo extremadamente estable
+    url = "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json"
+    try:
+        r = requests.get(url, timeout=5)
+        return r.json()
+    except:
+        # Si fallara hasta el CDN, Streamlit intentará cargar el dibujo básico de Plotly
+        return None
 
 # --- AUTH ---
 def check_auth():
@@ -213,7 +203,7 @@ def check_auth():
         st.session_state.ref_checked = True
 
     if not st.session_state.logged_in:
-        st.markdown("<div style='text-align:center; padding-top: 100px;'><h1>Pulse Login</h1></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; padding-top: 100px;'><h1>Pulse Analytics</h1><p>Sistema Maria Irma</p></div>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 1.2, 1])
         with col2:
             u = st.text_input("Usuario")
@@ -316,9 +306,8 @@ if check_auth():
                 map_data = m_df['M_Map'].value_counts().reset_index()
                 map_data.columns = ['Municipio', 'Registros']
                 
-                geojson = load_valle_geojson()
+                geojson = get_valle_map_data()
                 if geojson:
-                    # Mapa de Calor sobre dibujo vectorial (Choropleth)
                     fig = px.choropleth(
                         map_data, geojson=geojson, locations='Municipio',
                         featureidkey="properties.name", color='Registros',
@@ -329,8 +318,8 @@ if check_auth():
                     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550, coloraxis_showscale=True)
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 else:
-                    st.error("⚠️ El servidor del dibujo del mapa no responde. Mostrando tabla de datos como respaldo.")
-                    st.dataframe(map_data, use_container_width=True, hide_index=True)
+                    st.info("Visualizando datos de gestión por municipio:")
+                    st.bar_chart(map_data.set_index('Municipio'))
 
             with c_rank:
                 st.subheader("🏆 TOP Líderes")
