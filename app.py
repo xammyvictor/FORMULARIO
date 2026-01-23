@@ -34,11 +34,12 @@ def normalizar(texto):
     return " ".join(texto.split())
 
 def normalizar_para_mapa(muni):
-    """Mapea nombres de entrada a la identificación oficial del DANE."""
+    """Mapea nombres de entrada a la identificación oficial del DANE en el GeoJSON."""
     m = normalizar(muni)
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
-        "CALI": "SANTIAGO DE CALI",
+        "CALI": "SANTIAGO DE CALI", # Mapeo estándar DANE
+        "SANTIAGO DE CALI": "SANTIAGO DE CALI",
         "JAMUNDI": "JAMUNDI",
         "TULUA": "TULUA",
         "GUACARI": "GUACARI",
@@ -62,6 +63,7 @@ def normalizar_para_mapa(muni):
         "SEVILLA": "SEVILLA",
         "ZARZAL": "ZARZAL"
     }
+    # Si el mapeo falla, devolvemos el nombre normalizado original
     return mapping.get(m, m)
 
 # --- 3. ESTILOS VISUALES ---
@@ -192,7 +194,9 @@ def get_valle_geojson(url):
             valle_features = []
             for feature in data["features"]:
                 props = feature["properties"]
+                # Código DANE del Valle del Cauca es 76
                 if str(props.get("DPTO_CCDGO")) == "76":
+                    # Extraemos el nombre y lo normalizamos para que sea el ID de búsqueda
                     m_name = normalizar(props.get("MPIO_CNMBR", ""))
                     feature["id"] = m_name
                     valle_features.append(feature)
@@ -303,17 +307,17 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA MAXIMIZADO SIN LÍMITES ---
+    # --- MAPA MAXIMIZADO ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📍 Visualización Territorial Completa")
     
     m_df = df.copy()
+    # Aplicamos el mapeo para asegurar que Cali sea SANTIAGO DE CALI (o el nombre en el GeoJSON)
     m_df['ID_MPIO'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
     counts = m_df['ID_MPIO'].value_counts().reset_index()
     counts.columns = ['ID_MPIO', 'Registros']
     
-    # Ajustamos proporciones para eliminar el efecto "encerrado" [5, 1]
-    c_map_view, c_map_stats = st.columns([5, 1])
+    c_map_view, c_map_stats = st.columns([6, 1])
     
     with c_map_view:
         geojson_data = get_valle_geojson(URL_GITHUB_GEO)
@@ -393,7 +397,7 @@ def view_estadisticas():
 
     with c_map_stats:
         st.write("**🔥 Ranking Municipal**")
-        for _, row in counts.head(20).iterrows(): # Más municipios visibles
+        for _, row in counts.head(20).iterrows(): 
             st.markdown(f"""
                 <div class="rank-item" style="padding:8px; margin-bottom:6px; border-radius:12px;">
                     <span style="font-weight:600; font-size:0.75rem;">{row['ID_MPIO']}</span>
