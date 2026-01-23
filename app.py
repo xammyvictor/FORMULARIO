@@ -10,7 +10,8 @@ import unicodedata
 import json
 
 # --- 1. CONFIGURACIÓN Y CONSTANTES ---
-BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
+# Enlace de tu repositorio (El código lo convierte automáticamente a RAW)
+URL_GITHUB_GEO = "https://github.com/xammyvictor/FORMULARIO/blob/main/co_2018_MGN_MPIO_POLITICO.geojson"
 META_REGISTROS = 12000
 USUARIOS_ADMIN = ["fabian", "xammy", "brayan"]
 MUNICIPIOS_VALLE_TOTAL = 42
@@ -24,19 +25,16 @@ st.set_page_config(
 
 # --- 2. FUNCIONES DE NORMALIZACIÓN ---
 def normalizar(texto):
-    """Limpia el texto de tildes, espacios y lo pasa a mayúsculas de forma agresiva."""
+    """Limpia el texto de tildes, espacios y lo pasa a mayúsculas."""
     if not texto: return ""
     texto = str(texto).upper().strip()
     texto = unicodedata.normalize("NFD", texto)
     texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
-    # Reemplazos específicos para nombres oficiales
-    texto = texto.replace("SANTIAGO DE CALI", "CALI") # Simplificar si es necesario
     return " ".join(texto.split())
 
 def normalizar_para_mapa(muni):
-    """Mapea nombres de entrada a la identificación única del GeoJSON."""
+    """Mapea nombres de entrada a la identificación oficial del DANE."""
     m = normalizar(muni)
-    # Diccionario de traducción para asegurar que BUGA -> GUADALAJARA DE BUGA
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
@@ -94,6 +92,7 @@ def apply_custom_styles():
             background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%);
             height: 100%;
             border-radius: 20px;
+            transition: width 1s ease;
         }
 
         .pulse-kpi-card {
@@ -172,36 +171,27 @@ def save_data(data_dict):
     except Exception: return False
 
 @st.cache_data(ttl=3600)
-def get_valle_geojson():
-    """Descarga el GeoJSON con manejo de errores y fuentes alternativas."""
-    # URLs de respaldo
-    urls = [
-        "https://raw.githubusercontent.com/santiblanko/colombia.geojson/master/mpio.json",
-        "https://gist.githubusercontent.com/john-guerra/43c76568237d6f43ad9f/raw/800974fa2e16d4036e7885b51c8906352c803099/colombia.geo.json"
-    ]
-    
-    for url in urls:
-        try:
-            response = requests.get(url, timeout=20)
-            if response.status_code == 200:
-                data = response.json()
-                valle_features = []
-                for feature in data["features"]:
-                    props = feature["properties"]
-                    # Filtrar por departamento (Valle del Cauca = Código 76)
-                    dpto = str(props.get("DPTO_CCDGO", props.get("DPTO", "")))
-                    dpto_nom = normalizar(props.get("DPTO_CNMBR", ""))
-                    
-                    if dpto == "76" or "VALLE" in dpto_nom:
-                        m_name = normalizar(props.get("MPIO_CNMBR", props.get("mpio", "")))
-                        # Asignar ID para el cruce con Plotly Mapbox
-                        feature["id"] = m_name
-                        valle_features.append(feature)
-                
-                if valle_features:
-                    return {"type": "FeatureCollection", "features": valle_features}
-        except Exception:
-            continue
+def get_valle_geojson(url):
+    """Descarga el GeoJSON completo y filtra el Valle del Cauca en tiempo real."""
+    # Convertir link de GitHub a link RAW
+    raw_url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
+    try:
+        response = requests.get(raw_url, timeout=15)
+        if response.status_code == 200:
+            data = response.json()
+            valle_features = []
+            for feature in data["features"]:
+                props = feature["properties"]
+                # Código DANE del Valle del Cauca es 76
+                if str(props.get("DPTO_CCDGO")) == "76":
+                    m_name = normalizar(props.get("MPIO_CNMBR", ""))
+                    feature["id"] = m_name # Asignamos ID para el cruce de datos
+                    valle_features.append(feature)
+            
+            if valle_features:
+                return {"type": "FeatureCollection", "features": valle_features}
+    except Exception as e:
+        st.error(f"Error cargando GeoJSON: {e}")
     return None
 
 # --- 5. LÓGICA DE AUTENTICACIÓN ---
@@ -258,17 +248,17 @@ def view_registro():
                     "barrio": bar.upper(), "ciudad": ciu.upper(), "puesto": pue.upper()
                 })
                 if success:
-                    st.success("¡Registro guardado con éxito!")
+                    st.success("¡Registro guardado exitosamente!")
                     st.session_state.f_reset += 1
                     time.sleep(1)
                     st.rerun()
-                else: st.error("Fallo al conectar con Google Sheets.")
-            else: st.warning("Nombre, Cédula y Teléfono obligatorios.")
+                else: st.error("Fallo al guardar en la base de datos.")
+            else: st.warning("Complete los campos obligatorios.")
 
 def view_estadisticas():
     df = get_data()
     if df.empty:
-        st.info("No hay datos para mostrar.")
+        st.info("Cargando base de datos...")
         return
 
     st.title("Pulse Analytics | Valle del Cauca")
@@ -300,12 +290,13 @@ def view_estadisticas():
     v_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
 
     k1, k2, k3, k4 = st.columns(4)
-    for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
+    metricas = [("Hoy", v_hoy), ("Últ. 8 días", v_8d), ("Últ. 30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]
+    for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA MAPBOX (ESTILO DARK) ---
+    # --- MAPA ---
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📍 Concentración Territorial de Ciudadanos")
+    st.subheader("📍 Concentración Territorial (Valle del Cauca)")
     
     m_df = df.copy()
     m_df['ID_MPIO'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
@@ -315,7 +306,7 @@ def view_estadisticas():
     c_map_view, c_map_stats = st.columns([2.2, 1])
     
     with c_map_view:
-        geojson_data = get_valle_geojson()
+        geojson_data = get_valle_geojson(URL_GITHUB_GEO)
         if geojson_data:
             fig = px.choropleth_mapbox(
                 map_data, 
@@ -323,7 +314,7 @@ def view_estadisticas():
                 locations='ID_MPIO',
                 color='Registros',
                 color_continuous_scale="Reds",
-                mapbox_style="carto-darkmatter", # ESTILO NEGRO MATE
+                mapbox_style="carto-darkmatter", # Estilo Darkmatter profesional
                 center={"lat": 3.85, "lon": -76.3},
                 zoom=7.8,
                 opacity=0.8,
@@ -333,15 +324,15 @@ def view_estadisticas():
                 margin={"r":0,"t":0,"l":0,"b":0}, 
                 height=600,
                 paper_bgcolor="rgba(0,0,0,0)",
-                coloraxis_colorbar=dict(title="DENSIDAD", thickness=15, len=0.5)
+                coloraxis_colorbar=dict(title="DENSIDAD", thickness=15)
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.error("⚠️ No se pudo cargar el mapa geográfico. Verifica tu conexión o intenta recargar.")
+            st.error("⚠️ No se pudo cargar el archivo GeoJSON desde GitHub.")
             st.dataframe(map_data, use_container_width=True)
 
     with c_map_stats:
-        st.write("**🔥 Municipios con más actividad**")
+        st.write("**🔥 Ranking Municipal**")
         for _, row in map_data.head(6).iterrows():
             st.markdown(f"""
                 <div class="rank-item" style="padding:12px; margin-bottom:8px;">
@@ -352,7 +343,7 @@ def view_estadisticas():
         
         st.markdown("---")
         st.metric("Municipios Activos", f"{len(map_data)} / {MUNICIPIOS_VALLE_TOTAL}")
-        st.metric("Media de Gestión", f"{int(map_data['Registros'].mean()) if not map_data.empty else 0}")
+        st.metric("Gestión Promedio", f"{int(map_data['Registros'].mean()) if not map_data.empty else 0}")
 
     # --- LEADERBOARD ---
     st.markdown("---")
@@ -391,7 +382,7 @@ def view_busqueda():
         else:
             st.dataframe(df.tail(100), use_container_width=True, hide_index=True)
 
-# --- 7. EJECUCIÓN ---
+# --- 7. EJECUCIÓN PRINCIPAL ---
 if __name__ == "__main__":
     apply_custom_styles()
     
