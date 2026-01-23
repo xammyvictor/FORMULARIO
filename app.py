@@ -304,7 +304,7 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA RECONFIGURADO (ESTILO BLANCO Y DEMARCACIÓN) ---
+    # --- MAPA RECONFIGURADO (SÓLO EL VALLE Y MUNICIPIOS) ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📍 Concentración Territorial (Valle del Cauca)")
     
@@ -318,21 +318,22 @@ def view_estadisticas():
     with c_map_view:
         geojson_data = get_valle_geojson(URL_GITHUB_GEO)
         if geojson_data:
-            # Mapa con fondo blanco limpio
-            fig = px.choropleth_mapbox(
+            # Choropleth estándar con fondo blanco y aislamiento total
+            fig = px.choropleth(
                 map_data, 
                 geojson=geojson_data, 
                 locations='ID_MPIO',
                 color='Registros',
                 color_continuous_scale="Reds",
-                mapbox_style="carto-positron", # Fondo blanco/claro
-                center={"lat": 3.85, "lon": -76.3},
-                zoom=7.9,
-                opacity=0.8,
                 labels={'Registros': 'Total'}
             )
             
-            # Demarcación fuerte de municipios
+            # Ocultar el resto del mundo y centrar en los polígonos del Valle
+            fig.update_geos(
+                fitbounds="locations",
+                visible=False # Esto hace que sólo se vean los municipios proporcionados
+            )
+            
             fig.update_traces(
                 marker_line_width=2,
                 marker_line_color="#1e293b" # Color pizarra oscuro para los bordes
@@ -342,11 +343,11 @@ def view_estadisticas():
                 margin={"r":0,"t":0,"l":0,"b":0}, 
                 height=650,
                 paper_bgcolor="white",
+                plot_bgcolor="white",
                 coloraxis_colorbar=dict(
                     title="REGISTROS", 
                     thickness=20,
-                    len=0.5,
-                    bgcolor="rgba(255,255,255,0.8)"
+                    len=0.5
                 )
             )
             st.plotly_chart(fig, use_container_width=True)
