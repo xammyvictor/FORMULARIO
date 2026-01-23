@@ -136,9 +136,10 @@ def save_data(data_dict):
         return True
     except: return False
 
-# --- NORMALIZACIÓN DE MUNICIPIOS (Ajustado para match perfecto) ---
+# --- NORMALIZACIÓN DE MUNICIPIOS ---
 def normalizar_para_mapa(muni):
     m = str(muni).upper().strip()
+    # Mapeo exacto para los nombres en el archivo GeoJSON
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
@@ -147,36 +148,10 @@ def normalizar_para_mapa(muni):
         "GUACARI": "GUACARÍ",
         "DARIEN": "CALIMA",
         "CALIMA": "CALIMA",
-        "PALMIRA": "PALMIRA",
-        "CARTAGO": "CARTAGO",
-        "YUMBO": "YUMBO",
         "ANDALUCIA": "ANDALUCÍA",
-        "BUENAVENTURA": "BUENAVENTURA",
-        "BUGALAGRANDE": "BUGALAGRANDE",
-        "CAICEDONIA": "CAICEDONIA",
-        "CANDELARIA": "CANDELARIA",
-        "DAGUA": "DAGUA",
-        "EL CERRITO": "EL CERRITO",
-        "EL DOVIO": "EL DOVIO",
-        "FLORIDA": "FLORIDA",
-        "GINEBRA": "GINEBRA",
-        "LA CUMBRE": "LA CUMBRE",
         "LA UNION": "LA UNIÓN",
-        "LA VICTORIA": "LA VICTORIA",
-        "OBANDO": "OBANDO",
-        "PRADERA": "PRADERA",
-        "RESTREPO": "RESTREPO",
         "RIOFRIO": "RIOFRIO",
-        "ROLDANILLO": "ROLDANILLO",
-        "SAN PEDRO": "SAN PEDRO",
-        "SEVILLA": "SEVILLA",
-        "TORO": "TORO",
-        "TRUJILLO": "TRUJILLO",
-        "ULLOA": "ULLOA",
-        "VERSALLES": "VERSALLES",
-        "VIJES": "VIJES",
-        "YOTOCO": "YOTOCO",
-        "ZARZAL": "ZARZAL"
+        "BOLIVAR": "BOLÍVAR"
     }
     return mapping.get(m, m)
 
@@ -281,7 +256,7 @@ if check_auth():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- MAPA RECONSTRUIDO CON FILTRADO DE SEGURIDAD ---
+            # --- MAPA RECONSTRUIDO CON URL DIRECTA DEL VALLE ---
             st.subheader("📍 Mapa de Calor y Concentración Territorial")
             
             m_df = df.copy()
@@ -295,49 +270,31 @@ if check_auth():
                 map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots"], horizontal=True)
                 
                 try:
-                    # Usamos una URL de repositorio estable
-                    url_geojson = "https://raw.githubusercontent.com/marcovega/colombia-json/master/colombia.min.json"
-                    response = requests.get(url_geojson, timeout=20)
+                    # Usamos una URL directa y verificada de GeoJSON para Valle del Cauca
+                    url_valle = "https://raw.githubusercontent.com/jsgonzalez66/D3-Quickstart/master/data/valle-del-cauca.json"
+                    response = requests.get(url_valle, timeout=15)
                     
                     if response.status_code == 200:
-                        data_raw = response.json()
-                        features_source = data_raw.get('features', []) if isinstance(data_raw, dict) else data_raw
-
-                        # FILTRO DE FUERZA BRUTA: Buscamos el código 76 o el nombre Valle en cualquier propiedad
-                        valle_features = []
-                        for f in features_source:
-                            props = f.get('properties', {})
-                            # Convertimos todas las propiedades a un solo string para buscar "76" o "VALLE"
-                            all_props_str = str(list(props.values())).upper()
-                            if "76" in all_props_str or "VALLE DEL CAUCA" in all_props_str:
-                                valle_features.append(f)
+                        valle_geojson = response.json()
                         
-                        if valle_features:
-                            valle_geojson = {"type": "FeatureCollection", "features": valle_features}
-                            
-                            # Identificamos la mejor llave para el municipio
-                            sample_props = valle_features[0].get('properties', {})
-                            llave_muni = next((k for k in ["MPIO_CNMBRE", "NOMBRE_MPI", "name", "MUNIC"] if k in sample_props), "name")
-
-                            fig = px.choropleth(
-                                map_data, 
-                                geojson=valle_geojson, 
-                                locations='Municipio',
-                                featureidkey=f"properties.{llave_muni}", 
-                                color='Registros',
-                                color_continuous_scale="YlOrRd" if map_mode == "Coropleta Territorial" else "Reds",
-                                template="plotly_white"
-                            )
-                            fig.update_geos(fitbounds="locations", visible=False)
-                            fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
-                            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-                        else:
-                            st.error("No se pudo filtrar el mapa. Mostrando tabla resumen.")
-                            st.dataframe(map_data)
+                        # Renderizado del mapa
+                        fig = px.choropleth(
+                            map_data, 
+                            geojson=valle_geojson, 
+                            locations='Municipio',
+                            featureidkey="properties.name", # Llave estándar en archivos departamentales
+                            color='Registros',
+                            color_continuous_scale="YlOrRd" if map_mode == "Coropleta Territorial" else "Reds",
+                            template="plotly_white"
+                        )
+                        fig.update_geos(fitbounds="locations", visible=False)
+                        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
+                        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                     else:
-                        st.warning("Servidor de mapas fuera de línea.")
+                        st.error("No se pudo obtener el archivo del mapa. Mostrando tabla resumen.")
+                        st.dataframe(map_data)
                 except Exception as e:
-                    st.error(f"Error técnico: {str(e)}")
+                    st.error(f"Error técnico cargando mapa: {str(e)}")
 
             with c_map_stats:
                 st.markdown("<div style='padding-top: 50px;'></div>", unsafe_allow_html=True)
