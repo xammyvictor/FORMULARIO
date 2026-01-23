@@ -356,53 +356,47 @@ if check_auth():
                                 template="plotly_white"
                             )
                             fig.update_traces(marker_line_width=0.5, marker_line_color="white")
+                            
                         else:
-                        # Mapa de Burbujas / Hotspots sobre el dibujo
-                        # Calculamos centroides aproximados o simplemente usamos el dibujo como base
-                        fig = px.choropleth(
-                            map_data, geojson=geojson_data, locations='Municipio',
-                            featureidkey="properties.MPIO_CNMBR", color='Registros',
-                            color_continuous_scale="Reds", template="plotly_white"
-                        )
-                        # Añadimos puntos de calor (Burbujas) para resaltar municipios pequeños
-                        # En este caso simulamos el efecto visual mejorando el contraste de la coropleta
-                        fig.update_traces(marker_line_width=0.5, marker_line_color="white")
-
-                    fig.update_geos(fitbounds="locations", visible=False)
-                    fig.update_layout(
-                        margin={"r":0,"t":0,"l":0,"b":0}, 
-                        height=600,
-                        coloraxis_colorbar=dict(
-                            title="Densidad",
-                            thicknessmode="pixels", thickness=15,
-                            lenmode="pixels", len=300,
-                            yanchor="middle", y=0.5,
-                            ticks="outside"
-                        )
-                    )
-                    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-                except:
-                    st.error("Error al cargar el dibujo del mapa.")
-
-            with c_map_stats:
-                st.markdown("<div style='padding-top: 50px;'></div>", unsafe_allow_html=True)
-                st.write("**🔥 Puntos Críticos (Hotspots)**")
-                # Top 5 municipios con más actividad
-                hotspots = map_data.head(5)
-                for _, row in hotspots.iterrows():
-                    st.markdown(f"""
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 10px; background: white; border-radius: 12px; border: 1px solid #F1F5F9;">
-                            <span style="font-weight: 600; color: #1E293B;">{row['Municipio']}</span>
-                            <span class="hotspot-pill">{row['Registros']} Registros</span>
-                        </div>
-                    """, unsafe_allow_html=True)
-                
-                st.markdown("---")
-                # Resumen de actividad por zona (Ejemplo)
-                st.write("**Resumen de Cobertura**")
-                st.metric("Municipios Cubiertos", f"{len(map_data)} / 42")
-                st.metric("Promedio por Municipio", f"{int(map_data['Registros'].mean())}")
-
+                            # Mapa de Burbujas / Hotspots sobre el dibujo
+                            # Calculamos centroides aproximados o simplemente usamos el dibujo como base
+                            fig = px.choropleth(
+                                map_data, geojson=geojson_data, locations='Municipio',
+                                featureidkey="properties.MPIO_CNMBR", color='Registros',
+                                color_continuous_scale="Reds", template="plotly_white"
+                            )
+                            fig.update_traces(marker_line_width=0.5, marker_line_color="white")
+                            fig.update_geos(fitbounds="locations", visible=False)
+                            fig.update_layout(
+                                margin={"r":0,"t":0,"l":0,"b":0}, 
+                                height=600,
+                                coloraxis_colorbar=dict(
+                                    title="Densidad",
+                                    thicknessmode="pixels", thickness=15,
+                                    lenmode="pixels", len=300,
+                                    yanchor="middle", y=0.5,
+                                    ticks="outside"
+                                )
+                            )
+                            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                            except:
+                                st.error("Error al cargar el dibujo del mapa.")
+                                with c_map_stats:
+                                    st.markdown("<div style='padding-top: 50px;'></div>", unsafe_allow_html=True)
+                                    st.write("**🔥 Puntos Críticos (Hotspots)**")
+                                    hotspots = map_data.head(5)
+                                    for _, row in hotspots.iterrows():
+                                        st.markdown(f"""
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 10px; background: white; border-radius: 12px; border: 1px solid #F1F5F9;">
+                                        <span style="font-weight: 600; color: #1E293B;">{row['Municipio']}</span>
+                                        <span class="hotspot-pill">{row['Registros']} Registros</span>
+                                        </div>
+                                        """, unsafe_allow_html=True)
+                                        st.markdown("---")
+                                        st.write("**Resumen de Cobertura**")
+                                        st.metric("Municipios Cubiertos", f"{len(map_data)} / 42")
+                                        st.metric("Promedio por Municipio", f"{int(map_data['Registros'].mean())}")
+                                        
             # --- 4. RANKING Y TENDENCIA ---
             st.markdown("---")
             c_rank, c_trend = st.columns([1, 1.5])
