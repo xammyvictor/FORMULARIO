@@ -94,7 +94,7 @@ st.markdown("""
     .rank-name { font-weight: 700; color: #1E293B; font-size: 0.95rem; }
     .rank-badge { background: #F8FAFC; color: #64748B; padding: 6px 14px; border-radius: 12px; font-weight: 700; font-size: 0.8rem; border: 1px solid #E2E8F0; }
 
-    /* Sidebar and UI */
+    /* UI Fixes */
     .stSidebar { background-color: white !important; border-right: 1px solid #E2E8F0; }
     .stButton>button { border-radius: 14px !important; background: var(--pulse-pink) !important; font-weight: 700 !important; color: white !important; border: none !important; width: 100%; height: 3.2rem; }
     </style>
@@ -136,7 +136,7 @@ def save_data(data_dict):
         return True
     except: return False
 
-# --- NORMALIZACIÓN DE MUNICIPIOS ---
+# --- NORMALIZACIÓN DE MUNICIPIOS (Ajustado para match perfecto) ---
 def normalizar_para_mapa(muni):
     m = str(muni).upper().strip()
     mapping = {
@@ -251,7 +251,6 @@ if check_auth():
         if not df.empty:
             st.title("Pulse Analytics | Valle del Cauca")
             
-            # --- 1. HERO META ---
             total = len(df)
             perc = min((total / META_REGISTROS) * 100, 100)
             st.markdown(f"""
@@ -270,20 +269,19 @@ if check_auth():
                 </div>
             """, unsafe_allow_html=True)
 
-            # --- 2. KPIs ---
-            hoy = datetime.now()
-            df['F_S'] = df['Fecha Registro'].dt.date
-            v_hoy = len(df[df['F_S'] == hoy.date()])
-            v_8d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=8))])
-            v_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
-
             k1, k2, k3, k4 = st.columns(4)
+            hoy = datetime.now().date()
+            df['F_S'] = df['Fecha Registro'].dt.date
+            v_hoy = len(df[df['F_S'] == hoy])
+            v_8d = len(df[df['Fecha Registro'] > (datetime.now() - timedelta(days=8))])
+            v_30d = len(df[df['Fecha Registro'] > (datetime.now() - timedelta(days=30))])
+            
             for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
                 col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- 3. MAPA RECONSTRUIDO CON BÚSQUEDA POR CÓDIGO REGIONAL ---
+            # --- MAPA RECONSTRUIDO CON FILTRADO DE SEGURIDAD ---
             st.subheader("📍 Mapa de Calor y Concentración Territorial")
             
             m_df = df.copy()
@@ -297,72 +295,49 @@ if check_auth():
                 map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots"], horizontal=True)
                 
                 try:
-                    # Usamos la URL nacional estable
+                    # Usamos una URL de repositorio estable
                     url_geojson = "https://raw.githubusercontent.com/marcovega/colombia-json/master/colombia.min.json"
                     response = requests.get(url_geojson, timeout=20)
                     
                     if response.status_code == 200:
                         data_raw = response.json()
-                        
-                        if isinstance(data_raw, dict) and 'features' in data_raw:
-                            features_source = data_raw['features']
-                        elif isinstance(data_raw, list):
-                            features_source = data_raw
-                        else:
-                            features_source = []
+                        features_source = data_raw.get('features', []) if isinstance(data_raw, dict) else data_raw
 
-                        # FILTRADO INTELIGENTE: Buscamos por código regional '76' (Valle) o nombre
+                        # FILTRO DE FUERZA BRUTA: Buscamos el código 76 o el nombre Valle en cualquier propiedad
                         valle_features = []
                         for f in features_source:
-                            if not isinstance(f, dict): continue
                             props = f.get('properties', {})
-                            
-                            # Intentamos detectar el Valle por su código DIVIPOLA (76) o por su nombre
-                            dpto_codigo = str(props.get('DPTO_CCDGO') or props.get('DPTO') or props.get('cod_dpto', ''))
-                            dpto_nombre = str(props.get('DPTO_CNMBRE') or props.get('NOMBRE_DPT') or props.get('departamento', '')).upper()
-                            
-                            if dpto_codigo == '76' or 'VALLE DEL CAUCA' in dpto_nombre:
+                            # Convertimos todas las propiedades a un solo string para buscar "76" o "VALLE"
+                            all_props_str = str(list(props.values())).upper()
+                            if "76" in all_props_str or "VALLE DEL CAUCA" in all_props_str:
                                 valle_features.append(f)
                         
                         if valle_features:
-                            valle_geojson = {
-                                "type": "FeatureCollection",
-                                "features": valle_features
-                            }
+                            valle_geojson = {"type": "FeatureCollection", "features": valle_features}
                             
-                            # Detectamos la llave de municipio (MPIO_CNMBRE o NOMBRE_MPI)
+                            # Identificamos la mejor llave para el municipio
                             sample_props = valle_features[0].get('properties', {})
-                            llave_muni = "MPIO_CNMBRE" if "MPIO_CNMBRE" in sample_props else "NOMBRE_MPI"
+                            llave_muni = next((k for k in ["MPIO_CNMBRE", "NOMBRE_MPI", "name", "MUNIC"] if k in sample_props), "name")
 
-                            if map_mode == "Coropleta Territorial":
-                                fig = px.choropleth(
-                                    map_data, 
-                                    geojson=valle_geojson, 
-                                    locations='Municipio',
-                                    featureidkey=f"properties.{llave_muni}", 
-                                    color='Registros',
-                                    color_continuous_scale="YlOrRd",
-                                    template="plotly_white",
-                                    labels={'Registros': 'Total'}
-                                )
-                            else:
-                                fig = px.choropleth(
-                                    map_data, geojson=valle_geojson, locations='Municipio',
-                                    featureidkey=f"properties.{llave_muni}", color='Registros',
-                                    color_continuous_scale="Reds", template="plotly_white"
-                                )
-                                fig.update_traces(marker_line_width=0.5, marker_line_color="white")
-
+                            fig = px.choropleth(
+                                map_data, 
+                                geojson=valle_geojson, 
+                                locations='Municipio',
+                                featureidkey=f"properties.{llave_muni}", 
+                                color='Registros',
+                                color_continuous_scale="YlOrRd" if map_mode == "Coropleta Territorial" else "Reds",
+                                template="plotly_white"
+                            )
                             fig.update_geos(fitbounds="locations", visible=False)
                             fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
                             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                         else:
-                            st.warning("⚠️ No se pudieron filtrar las geometrías. Mostrando tabla de datos.")
+                            st.error("No se pudo filtrar el mapa. Mostrando tabla resumen.")
                             st.dataframe(map_data)
                     else:
-                        st.warning("⚠️ El servidor de mapas no respondió correctamente.")
+                        st.warning("Servidor de mapas fuera de línea.")
                 except Exception as e:
-                    st.error(f"Error procesando el mapa: {str(e)}")
+                    st.error(f"Error técnico: {str(e)}")
 
             with c_map_stats:
                 st.markdown("<div style='padding-top: 50px;'></div>", unsafe_allow_html=True)
@@ -374,10 +349,9 @@ if check_auth():
                             <span class="hotspot-pill">{row['Registros']} Registros</span>
                         </div>
                     """, unsafe_allow_html=True)
-                
-                st.metric("Cobertura Regional", f"{len(map_data)} / 42 Municipios")
+                st.metric("Cobertura", f"{len(map_data)} / 42 Municipios")
 
-            # --- 4. RANKING Y TENDENCIA ---
+            # --- RANKING Y TENDENCIA ---
             st.markdown("---")
             c_rank, c_trend = st.columns([1, 1.5])
             
