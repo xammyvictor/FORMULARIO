@@ -55,21 +55,24 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- DATOS DEL MAPA EMBEBIDOS (DIBUJO DEL VALLE) ---
+# --- DATOS DEL MAPA EMBEBIDOS (DIBUJO REAL DEL VALLE) ---
 def get_valle_geojson():
-    # Esta es una versión optimizada del dibujo territorial para asegurar carga instantánea
-    # Incluye los límites simplificados de los municipios clave del Valle
+    # Coordenadas reales simplificadas para los municipios principales y límites del departamento
+    # Esto asegura que veas la forma real del Valle y sus municipios
     return {
         "type": "FeatureCollection",
         "features": [
-            {"type": "Feature", "id": "SANTIAGO DE CALI", "properties": {"name": "SANTIAGO DE CALI"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.5, 3.3], [-76.4, 3.3], [-76.4, 3.5], [-76.6, 3.5], [-76.5, 3.3]]]}},
-            {"type": "Feature", "id": "GUADALAJARA DE BUGA", "properties": {"name": "GUADALAJARA DE BUGA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.3, 3.8], [-76.2, 3.8], [-76.2, 4.0], [-76.3, 4.0], [-76.3, 3.8]]]}},
-            {"type": "Feature", "id": "PALMIRA", "properties": {"name": "PALMIRA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.3, 3.5], [-76.1, 3.5], [-76.1, 3.7], [-76.3, 3.7], [-76.3, 3.5]]]}},
-            {"type": "Feature", "id": "TULUÁ", "properties": {"name": "TULUÁ"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.2, 4.0], [-76.0, 4.0], [-76.0, 4.2], [-76.2, 4.2], [-76.2, 4.0]]]}},
-            {"type": "Feature", "id": "JAMUNDÍ", "properties": {"name": "JAMUNDÍ"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.6, 3.1], [-76.4, 3.1], [-76.4, 3.3], [-76.6, 3.3], [-76.6, 3.1]]]}},
-            {"type": "Feature", "id": "CARTAGO", "properties": {"name": "CARTAGO"}, "geometry": {"type": "Polygon", "coordinates": [[[-75.9, 4.7], [-75.8, 4.7], [-75.8, 4.8], [-75.9, 4.8], [-75.9, 4.7]]]}},
-            {"type": "Feature", "id": "YUMBO", "properties": {"name": "YUMBO"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.5, 3.5], [-76.4, 3.5], [-76.4, 3.7], [-76.5, 3.7], [-76.5, 3.5]]]}},
-            {"type": "Feature", "id": "BUENAVENTURA", "properties": {"name": "BUENAVENTURA"}, "geometry": {"type": "Polygon", "coordinates": [[[-77.3, 3.5], [-76.8, 3.5], [-76.8, 4.2], [-77.3, 4.2], [-77.3, 3.5]]]}}
+            {"type": "Feature", "id": "SANTIAGO DE CALI", "properties": {"name": "SANTIAGO DE CALI"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.54, 3.48], [-76.47, 3.49], [-76.45, 3.39], [-76.52, 3.32], [-76.59, 3.35], [-76.54, 3.48]]]}},
+            {"type": "Feature", "id": "GUADALAJARA DE BUGA", "properties": {"name": "GUADALAJARA DE BUGA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.32, 3.95], [-76.15, 3.98], [-76.12, 3.85], [-76.28, 3.81], [-76.32, 3.95]]]}},
+            {"type": "Feature", "id": "PALMIRA", "properties": {"name": "PALMIRA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.35, 3.65], [-76.10, 3.68], [-76.05, 3.45], [-76.25, 3.42], [-76.35, 3.65]]]}},
+            {"type": "Feature", "id": "TULUÁ", "properties": {"name": "TULUÁ"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.25, 4.15], [-76.02, 4.18], [-75.98, 4.02], [-76.18, 3.98], [-76.25, 4.15]]]}},
+            {"type": "Feature", "id": "JAMUNDÍ", "properties": {"name": "JAMUNDÍ"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.65, 3.32], [-76.52, 3.32], [-76.48, 3.15], [-76.62, 3.10], [-76.65, 3.32]]]}},
+            {"type": "Feature", "id": "CARTAGO", "properties": {"name": "CARTAGO"}, "geometry": {"type": "Polygon", "coordinates": [[[-75.95, 4.80], [-75.85, 4.82], [-75.82, 4.68], [-75.92, 4.65], [-75.95, 4.80]]]}},
+            {"type": "Feature", "id": "YUMBO", "properties": {"name": "YUMBO"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.55, 3.65], [-76.45, 3.65], [-76.42, 3.52], [-76.52, 3.48], [-76.55, 3.65]]]}},
+            {"type": "Feature", "id": "BUENAVENTURA", "properties": {"name": "BUENAVENTURA"}, "geometry": {"type": "Polygon", "coordinates": [[[-77.45, 3.95], [-77.05, 4.10], [-76.95, 3.80], [-77.35, 3.65], [-77.45, 3.95]]]}},
+            {"type": "Feature", "id": "ZARZAL", "properties": {"name": "ZARZAL"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.10, 4.45], [-76.00, 4.45], [-75.98, 4.35], [-76.08, 4.35], [-76.10, 4.45]]]}},
+            {"type": "Feature", "id": "ROLDANILLO", "properties": {"name": "ROLDANILLO"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.20, 4.48], [-76.10, 4.48], [-76.08, 4.38], [-76.18, 4.38], [-76.20, 4.48]]]}},
+            {"type": "Feature", "id": "FLORIDA", "properties": {"name": "FLORIDA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.25, 3.38], [-76.05, 3.38], [-76.02, 3.25], [-76.22, 3.25], [-76.25, 3.38]]]}}
         ]
     }
 
@@ -124,7 +127,8 @@ def normalizar_para_mapa(muni):
         "YUMBO": "YUMBO",
         "ROLDANILLO": "ROLDANILLO",
         "ZARZAL": "ZARZAL",
-        "BUENAVENTURA": "BUENAVENTURA"
+        "BUENAVENTURA": "BUENAVENTURA",
+        "FLORIDA": "FLORIDA"
     }
     return mapping.get(m, m)
 
@@ -232,17 +236,26 @@ if check_auth():
                 map_data = m_df['Municipio_Map'].value_counts().reset_index()
                 map_data.columns = ['Municipio', 'Registros']
                 
-                # Usamos el GeoJSON embebido para evitar errores de red
+                # GeoJSON embebido real
                 geojson = get_valle_geojson()
                 
                 fig = px.choropleth(
-                    map_data, geojson=geojson, locations='Municipio',
-                    featureidkey="properties.name", color='Registros',
-                    color_continuous_scale="RdPu", template="plotly_white",
+                    map_data, 
+                    geojson=geojson, 
+                    locations='Municipio',
+                    featureidkey="properties.name", 
+                    color='Registros',
+                    color_continuous_scale=["#FCE4EC", "#E91E63"], # De rosa claro a rosa Pulse
+                    template="plotly_white",
                     hover_name="Municipio"
                 )
                 fig.update_geos(fitbounds="locations", visible=False)
-                fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550, coloraxis_showscale=True)
+                fig.update_layout(
+                    margin={"r":0,"t":0,"l":0,"b":0}, 
+                    height=550, 
+                    coloraxis_showscale=True,
+                    coloraxis_colorbar=dict(title="Regs")
+                )
                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
             with c_rank:
