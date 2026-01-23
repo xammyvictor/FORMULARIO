@@ -60,24 +60,25 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- DIBUJO REAL DEL VALLE DEL CAUCA (GEOJSON INTEGRADO PARA PYDECK) ---
-def get_valle_geojson_data():
+# --- BASE DE DATOS DE COORDENADAS ---
+def get_municipality_coords():
     return {
-        "type": "FeatureCollection",
-        "features": [
-            {"type": "Feature", "properties": {"name": "SANTIAGO DE CALI"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.54, 3.48], [-76.45, 3.52], [-76.42, 3.42], [-76.46, 3.32], [-76.58, 3.34], [-76.54, 3.48]]]}},
-            {"type": "Feature", "properties": {"name": "GUADALAJARA DE BUGA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.32, 3.95], [-76.10, 3.98], [-76.12, 3.82], [-76.25, 3.84], [-76.32, 3.95]]]}},
-            {"type": "Feature", "properties": {"name": "PALMIRA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.35, 3.65], [-76.10, 3.68], [-76.05, 3.45], [-76.25, 3.42], [-76.35, 3.65]]]}},
-            {"type": "Feature", "properties": {"name": "TULUÁ"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.22, 4.15], [-75.95, 4.18], [-75.92, 4.02], [-76.15, 3.98], [-76.22, 4.15]]]}},
-            {"type": "Feature", "properties": {"name": "JAMUNDÍ"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.65, 3.32], [-76.52, 3.32], [-76.48, 3.15], [-76.62, 3.10], [-76.65, 3.32]]]}},
-            {"type": "Feature", "properties": {"name": "CARTAGO"}, "geometry": {"type": "Polygon", "coordinates": [[[-75.95, 4.80], [-75.82, 4.82], [-75.80, 4.68], [-75.92, 4.65], [-75.95, 4.80]]]}},
-            {"type": "Feature", "properties": {"name": "YUMBO"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.55, 3.65], [-76.42, 3.65], [-76.40, 3.52], [-76.52, 3.48], [-76.55, 3.65]]]}},
-            {"type": "Feature", "properties": {"name": "BUENAVENTURA"}, "geometry": {"type": "Polygon", "coordinates": [[[-77.45, 3.95], [-76.95, 4.10], [-76.85, 3.75], [-77.35, 3.60], [-77.45, 3.95]]]}},
-            {"type": "Feature", "properties": {"name": "ZARZAL"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.10, 4.45], [-75.98, 4.45], [-75.95, 4.35], [-76.08, 4.35], [-76.10, 4.45]]]}},
-            {"type": "Feature", "properties": {"name": "ROLDANILLO"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.20, 4.48], [-76.10, 4.48], [-76.08, 4.38], [-76.18, 4.38], [-76.20, 4.48]]]}},
-            {"type": "Feature", "properties": {"name": "FLORIDA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.25, 3.38], [-76.02, 3.38], [-76.00, 3.25], [-76.22, 3.25], [-76.25, 3.38]]]}},
-            {"type": "Feature", "properties": {"name": "CANDELARIA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.42, 3.42], [-76.25, 3.42], [-76.28, 3.32], [-76.44, 3.32], [-76.42, 3.42]]]}}
-        ]
+        "SANTIAGO DE CALI": {"lat": 3.4516, "lon": -76.5320},
+        "GUADALAJARA DE BUGA": {"lat": 3.9009, "lon": -76.3008},
+        "PALMIRA": {"lat": 3.5394, "lon": -76.3036},
+        "TULUÁ": {"lat": 4.0847, "lon": -76.1954},
+        "JAMUNDÍ": {"lat": 3.2612, "lon": -76.5350},
+        "CARTAGO": {"lat": 4.7464, "lon": -75.9117},
+        "YUMBO": {"lat": 3.6412, "lon": -76.4912},
+        "BUENAVENTURA": {"lat": 3.8801, "lon": -77.0312},
+        "ZARZAL": {"lat": 4.3912, "lon": -76.0712},
+        "ROLDANILLO": {"lat": 4.4112, "lon": -76.1512},
+        "FLORIDA": {"lat": 3.3212, "lon": -76.2312},
+        "CANDELARIA": {"lat": 3.4112, "lon": -76.3512},
+        "PRADERA": {"lat": 3.4212, "lon": -76.2412},
+        "EL CERRITO": {"lat": 3.6812, "lon": -76.3112},
+        "GINEBRA": {"lat": 3.7212, "lon": -76.2612},
+        "GUACARÍ": {"lat": 3.7612, "lon": -76.3312}
     }
 
 # --- CONEXIÓN GOOGLE SHEETS ---
@@ -147,7 +148,7 @@ def check_auth():
         st.session_state.ref_checked = True
 
     if not st.session_state.logged_in:
-        st.markdown("<div style='text-align:center; padding-top: 100px;'><h1>Pulse Analytics</h1><p>Sistema Maria Irma</p></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; padding-top: 100px;'><h1>Pulse Login</h1><p>Gestión Maria Irma</p></div>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 1.2, 1])
         with col2:
             u = st.text_input("Usuario")
@@ -225,63 +226,58 @@ if check_auth():
             for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("Municipios", df['Ciudad'].nunique()), ("Líderes", df['Registrado Por'].nunique()), ("Objetivo", META_REGISTROS)]):
                 col.markdown(f"""<div class="pulse-card"><div class="pulse-label">{lab}</div><div class="pulse-value">{val:,}</div></div>""", unsafe_allow_html=True)
 
-            # --- MAPA DE COROPLETAS CON PYDECK ---
+            # --- MAPA DE BURBUJAS CON PYDECK ---
             st.markdown("<br>", unsafe_allow_html=True)
             c_map, c_rank = st.columns([1.6, 1])
             
             with c_map:
-                st.subheader("📍 Mapa de Coropletas (Pydeck Native)")
+                st.subheader("📍 Concentración de Registros (Mapa de Burbujas)")
                 
-                # Procesar datos
+                # Procesar datos para las burbujas
                 m_df = df.copy()
                 m_df['M_Map'] = m_df['Ciudad'].apply(normalizar_para_mapa)
-                counts = m_df['M_Map'].value_counts().to_dict()
+                counts = m_df['M_Map'].value_counts().reset_index()
+                counts.columns = ['municipio', 'registros']
                 
-                # Inyectar datos en el GeoJSON
-                geojson = get_valle_geojson_data()
-                max_regs = max(counts.values()) if counts else 1
+                # Unir con coordenadas
+                coords = get_municipality_coords()
+                counts['lat'] = counts['municipio'].map(lambda x: coords.get(x, {}).get('lat', 3.8))
+                counts['lon'] = counts['municipio'].map(lambda x: coords.get(x, {}).get('lon', -76.5))
                 
-                for feature in geojson['features']:
-                    m_name = feature['properties']['name']
-                    reg_count = counts.get(m_name, 0)
-                    feature['properties']['registros'] = reg_count
-                    # Calcular color (RGBA) - De rosa claro a rosa intenso
-                    intensity = (reg_count / max_regs) if max_regs > 0 else 0
-                    feature['properties']['fill_color'] = [233, 30, 99, int(50 + (intensity * 205))] # Pulse Pink con opacidad variable
-
-                # Configuración de Capa Pydeck
+                # Configurar Capa de Burbujas (ScatterplotLayer)
                 layer = pdk.Layer(
-                    "GeoJsonLayer",
-                    geojson,
+                    "ScatterplotLayer",
+                    counts,
+                    get_position=["lon", "lat"],
+                    get_color=[233, 30, 99, 160], # Rosa Pulse con transparencia
+                    get_radius="registros * 100 + 1000", # Tamaño dinámico
+                    pickable=True,
                     opacity=0.8,
                     stroked=True,
                     filled=True,
-                    extruded=True, # 3D opcional
-                    wireframe=True,
-                    get_elevation="registros * 100", # Elevación basada en registros
-                    get_fill_color="properties.fill_color",
-                    get_line_color=[255, 255, 255],
+                    radius_min_pixels=5,
+                    radius_max_pixels=60,
                     line_width_min_pixels=1,
-                    pickable=True
+                    get_line_color=[255, 255, 255]
                 )
 
-                # Vista inicial centrada en el Valle del Cauca
+                # Vista inicial
                 view_state = pdk.ViewState(
                     latitude=3.8,
                     longitude=-76.5,
                     zoom=7.5,
-                    pitch=45,
+                    pitch=0,
                     bearing=0
                 )
 
-                # Renderizar Mapa
+                # Renderizar Mapa de Burbujas
                 st.pydeck_chart(pdk.Deck(
                     layers=[layer],
                     initial_view_state=view_state,
-                    map_style="mapbox://styles/mapbox/light-v9", # Estilo limpio
+                    map_style="mapbox://styles/mapbox/light-v10",
                     tooltip={
-                        "html": "<b>Municipio:</b> {name}<br/><b>Registros:</b> {registros}",
-                        "style": {"color": "white"}
+                        "html": "<b>Municipio:</b> {municipio}<br/><b>Registros:</b> {registros}",
+                        "style": {"color": "white", "font-family": "Plus Jakarta Sans"}
                     }
                 ))
 
