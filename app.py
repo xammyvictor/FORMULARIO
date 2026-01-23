@@ -26,28 +26,19 @@ st.set_page_config(
 
 # --- 2. FUNCIONES DE NORMALIZACIÓN ---
 def normalizar(texto):
-    """Limpia el texto de tildes, espacios y lo pasa a mayúsculas de forma estricta."""
+    """Limpia el texto de tildes, espacios y lo pasa a mayúsculas."""
     if not texto: return ""
     texto = str(texto).upper().strip()
     texto = unicodedata.normalize("NFD", texto)
     texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
-    # Elimina espacios dobles y limpia extremos
     return " ".join(texto.split())
 
-def traducir_nombre_db(muni):
-    """
-    Traduce nombres comunes de la base de datos al nombre oficial del mapa.
-    Asegura que 'CALI' coincida con 'SANTIAGO DE CALI'.
-    """
+def normalizar_para_mapa(muni):
+    """Mapea nombres de entrada a la identificación oficial del DANE."""
     m = normalizar(muni)
-    
-    # CASO ESPECIAL CALI: Forzamos la coincidencia con el GeoJSON del DANE
-    if "CALI" in m:
-        return "SANTIAGO DE CALI"
-    
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
-        "GUADALAJARA DE BUGA": "GUADALAJARA DE BUGA",
+        "CALI": "SANTIAGO DE CALI",
         "JAMUNDI": "JAMUNDI",
         "TULUA": "TULUA",
         "GUACARI": "GUACARI",
@@ -60,7 +51,16 @@ def traducir_nombre_db(muni):
         "PALMIRA": "PALMIRA",
         "DAGUA": "DAGUA",
         "CARTAGO": "CARTAGO",
-        "EL CERRITO": "EL CERRITO"
+        "EL CERRITO": "EL CERRITO",
+        "BUGALAGRANDE": "BUGALAGRANDE",
+        "CAICEDONIA": "CAICEDONIA",
+        "FLORIDA": "FLORIDA",
+        "GINEBRA": "GINEBRA",
+        "PRADERA": "PRADERA",
+        "RESTREPO": "RESTREPO",
+        "ROLDANILLO": "ROLDANILLO",
+        "SEVILLA": "SEVILLA",
+        "ZARZAL": "ZARZAL"
     }
     return mapping.get(m, m)
 
@@ -85,6 +85,7 @@ def apply_custom_styles():
             border-radius: 32px;
             margin-bottom: 35px;
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255,255,255,0.05);
         }
         .hero-label { font-size: 0.8rem; font-weight: 700; opacity: 0.6; letter-spacing: 0.1em; text-transform: uppercase; }
         .hero-value { font-size: 4rem; font-weight: 800; line-height: 1; margin: 10px 0; color: white !important; }
@@ -182,7 +183,7 @@ def save_data(data_dict):
 
 @st.cache_data(ttl=3600)
 def get_valle_geojson(url):
-    """Descarga el GeoJSON completo y filtra el Valle del Cauca."""
+    """Descarga el GeoJSON completo y filtra el Valle del Cauca en tiempo real."""
     raw_url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
     try:
         response = requests.get(raw_url, timeout=15)
@@ -191,10 +192,7 @@ def get_valle_geojson(url):
             valle_features = []
             for feature in data["features"]:
                 props = feature["properties"]
-                # Detecta código 76 de forma flexible (string o int)
-                dpto_code = str(props.get("DPTO_CCDGO", "")).strip().lstrip('0')
-                if dpto_code == "76":
-                    # El ID del feature será el nombre oficial normalizado
+                if str(props.get("DPTO_CCDGO")) == "76":
                     m_name = normalizar(props.get("MPIO_CNMBR", ""))
                     feature["id"] = m_name
                     valle_features.append(feature)
@@ -294,65 +292,60 @@ def view_estadisticas():
     """, unsafe_allow_html=True)
 
     # --- KPIs ---
-    k1, k2, k3, k4 = st.columns(4)
     hoy = datetime.now()
     df['F_S'] = df['Fecha Registro'].dt.date
     v_hoy = len(df[df['F_S'] == hoy.date()])
     v_8d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=8))])
     v_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
 
-    for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("Últ. 8 días", v_8d), ("Últ. 30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
+    k1, k2, k3, k4 = st.columns(4)
+    metricas = [("Hoy", v_hoy), ("Últ. 8 días", v_8d), ("Últ. 30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]
+    for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA MAXIMIZADO ---
+    # --- MAPA MAXIMIZADO SIN LÍMITES ---
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📍 Visualización Territorial Departamental")
+    st.subheader("📍 Visualización Territorial Completa")
     
     m_df = df.copy()
-    # Traducimos lo de la DB al nombre oficial (Ej: Cali -> Santiago de Cali)
-    m_df['ID_MPIO'] = m_df['Ciudad'].apply(traducir_nombre_db)
+    m_df['ID_MPIO'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
     counts = m_df['ID_MPIO'].value_counts().reset_index()
     counts.columns = ['ID_MPIO', 'Registros']
     
-    c_map_view, c_map_stats = st.columns([6, 1])
+    # Ajustamos proporciones para eliminar el efecto "encerrado" [5, 1]
+    c_map_view, c_map_stats = st.columns([5, 1])
     
     with c_map_view:
         geojson_data = get_valle_geojson(URL_GITHUB_GEO)
         if geojson_data:
             all_features = geojson_data["features"]
-            # Lista de IDs oficiales en el mapa
             all_ids = [f["id"] for f in all_features]
             
-            # Cálculo de posiciones para etiquetas de texto
             lats, lons, names = [], [], []
             for f in all_features:
                 coords = f["geometry"]["coordinates"]
                 if f["geometry"]["type"] == "Polygon":
                     coords_flat = np.array(coords[0])
-                else: 
+                else: # MultiPolygon
                     coords_flat = np.array([c for sub in coords for c in sub[0]])
                 
                 lons.append(coords_flat[:, 0].mean())
                 lats.append(coords_flat[:, 1].mean())
-                # Nombre original para etiqueta visual
-                names.append(f["properties"].get("MPIO_CNMBR", ""))
+                names.append(f["id"])
 
-            # Aseguramos coincidencia perfecta eliminando espacios extra en el cruce
             df_base = pd.DataFrame({"ID_MPIO": all_ids})
             map_data_full = df_base.merge(counts, on='ID_MPIO', how='left').fillna(0)
             
-            # CREACIÓN DEL MAPA
             fig = px.choropleth(
                 map_data_full, 
                 geojson=geojson_data, 
                 locations='ID_MPIO',
                 color='Registros',
-                # Escala: 0 es blanco, >0 es degradado Pulse
                 color_continuous_scale=[[0, 'white'], [0.0001, '#FCE4EC'], [1, '#E91E63']],
                 labels={'Registros': 'Total'}
             )
             
-            # CAPA DE TEXTO (Nombres sobre los municipios)
+            # Etiquetas más visibles
             fig.add_trace(go.Scattergeo(
                 lat=lats,
                 lon=lons,
@@ -363,55 +356,60 @@ def view_estadisticas():
                 showlegend=False
             ))
             
-            # CONFIGURACIÓN GEOGRÁFICA
+            # Forzamos que el mapa use todo el canvas sin bordes internos
             fig.update_geos(
-                fitbounds="locations", 
-                visible=False, 
-                showframe=False, 
+                fitbounds="locations",
+                visible=False,
                 projection_type="mercator"
             )
             
-            # FRONTERAS NEGRAS
             fig.update_traces(
-                marker_line_width=1.8, 
-                marker_line_color="black", 
+                marker_line_width=1.8,
+                marker_line_color="black",
                 selector=dict(type='choropleth')
             )
             
+            # Altura al máximo y márgenes a cero absoluto
             fig.update_layout(
                 margin={"r":0,"t":0,"l":0,"b":0}, 
                 height=1000,
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="white",
+                plot_bgcolor="white",
                 coloraxis_colorbar=dict(
                     title="REGISTROS", 
-                    thickness=30, 
-                    len=0.6, 
-                    yanchor="middle", y=0.5, 
-                    xanchor="left", x=0.02
-                )
+                    thickness=25, 
+                    len=0.5, 
+                    yanchor="middle", 
+                    y=0.5,
+                    xanchor="left",
+                    x=0.02
+                ),
+                autosize=True
             )
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         else:
-            st.error("⚠️ Error cargando mapa.")
+            st.error("⚠️ No se pudo cargar el mapa.")
+            st.dataframe(counts, use_container_width=True)
 
     with c_map_stats:
-        st.write("**🔥 Ranking**")
-        ranking_display = counts.sort_values("Registros", ascending=False)
-        for _, row in ranking_display.head(20).iterrows(): 
+        st.write("**🔥 Ranking Municipal**")
+        for _, row in counts.head(20).iterrows(): # Más municipios visibles
             st.markdown(f"""
                 <div class="rank-item" style="padding:8px; margin-bottom:6px; border-radius:12px;">
                     <span style="font-weight:600; font-size:0.75rem;">{row['ID_MPIO']}</span>
                     <span class="hotspot-pill" style="font-size:0.7rem; padding:2px 8px;">{row['Registros']}</span>
                 </div>
             """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        st.metric("Municipios", f"{len(counts)}/42")
 
-    st.markdown("---")
     # --- LEADERBOARD ---
+    st.markdown("---")
     c_rank, c_trend = st.columns([1, 1.5])
     
     with c_rank:
-        st.subheader("🏆 Leaderboard")
+        st.subheader("🏆 Leaderboard de Líderes")
         ranking = df['Registrado Por'].value_counts().reset_index()
         ranking.columns = ['Líder', 'Total']
         for i, row in ranking.head(8).iterrows():
@@ -436,29 +434,35 @@ def view_busqueda():
     st.title("🔍 Explorador de Registros")
     df = get_data()
     if not df.empty:
-        q = st.text_input("Buscar...").upper()
+        q = st.text_input("Buscar por nombre, cédula o municipio...").upper()
         if q:
             res = df[df.astype(str).apply(lambda x: q in x.str.upper().values, axis=1)]
             st.dataframe(res, use_container_width=True, hide_index=True)
         else:
             st.dataframe(df.tail(100), use_container_width=True, hide_index=True)
 
+# --- 7. EJECUCIÓN PRINCIPAL ---
 if __name__ == "__main__":
     apply_custom_styles()
+    
     if check_auth():
         usuario = st.session_state.user_name
         es_admin = usuario.lower() in USUARIOS_ADMIN and not st.session_state.get("is_guest", False)
+
         st.sidebar.markdown(f"""
             <div style='background:#F1F5F9; padding:20px; border-radius:18px; margin-bottom:20px;'>
                 <p style='margin:0; font-size:0.75rem; font-weight:700; color:#64748B;'>SESIÓN ACTIVA</p>
                 <p style='margin:0; font-size:1.1rem; font-weight:800; color:#0F172A;'>{usuario.upper()}</p>
             </div>
         """, unsafe_allow_html=True)
+        
         opciones = ["📝 Registro", "📊 Estadísticas", "🔍 Búsqueda"] if es_admin else ["📝 Registro"]
         opcion = st.sidebar.radio("MENÚ PRINCIPAL", opciones)
+        
         if st.sidebar.button("Cerrar Sesión"):
             st.session_state.clear()
             st.rerun()
+
         if opcion == "📝 Registro": view_registro()
         elif opcion == "📊 Estadísticas": view_estadisticas()
         elif opcion == "🔍 Búsqueda": view_busqueda()
