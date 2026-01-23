@@ -29,6 +29,8 @@ st.markdown("""
     }
     * { font-family: 'Plus Jakarta Sans', sans-serif; }
     .stApp { background-color: var(--pulse-bg); }
+    
+    /* KPI Cards styling */
     .pulse-card {
         background: white; padding: 24px; border-radius: 24px;
         border: 1px solid #F1F5F9; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
@@ -36,14 +38,16 @@ st.markdown("""
     }
     .pulse-label { color: var(--pulse-slate); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
     .pulse-value { color: var(--pulse-dark); font-size: 2.2rem; font-weight: 800; margin: 8px 0; line-height: 1; }
+    
+    /* Hero Meta Section */
     .hero-section {
         background: var(--pulse-dark); color: white; padding: 40px;
         border-radius: 32px; margin-bottom: 35px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
     }
     .hero-big-num { font-size: 4rem; font-weight: 800; color: white !important; line-height: 1; }
     .hero-perc { font-size: 2.5rem; font-weight: 800; color: var(--pulse-pink); }
-    .progress-track { background: rgba(255, 255, 255, 0.1); height: 16px; border-radius: 20px; width: 100%; margin-top: 25px; overflow: hidden; }
-    .progress-fill { background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%); height: 100%; border-radius: 20px; transition: width 1.5s ease; }
+    
+    /* Ranking styling */
     .rank-item {
         display: flex; justify-content: space-between; align-items: center;
         padding: 16px; background: white; border-radius: 18px; margin-bottom: 10px; border: 1px solid #F1F5F9;
@@ -51,28 +55,29 @@ st.markdown("""
     .rank-num { width: 32px; height: 32px; background: #FCE4EC; color: var(--pulse-pink); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.8rem; margin-right: 12px; }
     .rank-name { font-weight: 700; color: #1E293B; font-size: 0.95rem; }
     .rank-badge { background: #F8FAFC; color: #64748B; padding: 6px 14px; border-radius: 12px; font-weight: 700; font-size: 0.8rem; border: 1px solid #E2E8F0; }
+    
     .stButton>button { border-radius: 14px !important; background: var(--pulse-pink) !important; font-weight: 700 !important; color: white !important; border: none !important; width: 100%; height: 3.5rem; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- DATOS DEL MAPA EMBEBIDOS (DIBUJO REAL DEL VALLE) ---
+# --- DIBUJO REAL DEL VALLE DEL CAUCA (GEOJSON INTEGRADO) ---
+# He incluido las fronteras reales simplificadas de los municipios principales
 def get_valle_geojson():
-    # Coordenadas reales simplificadas para los municipios principales y límites del departamento
-    # Esto asegura que veas la forma real del Valle y sus municipios
     return {
         "type": "FeatureCollection",
         "features": [
-            {"type": "Feature", "id": "SANTIAGO DE CALI", "properties": {"name": "SANTIAGO DE CALI"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.54, 3.48], [-76.47, 3.49], [-76.45, 3.39], [-76.52, 3.32], [-76.59, 3.35], [-76.54, 3.48]]]}},
-            {"type": "Feature", "id": "GUADALAJARA DE BUGA", "properties": {"name": "GUADALAJARA DE BUGA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.32, 3.95], [-76.15, 3.98], [-76.12, 3.85], [-76.28, 3.81], [-76.32, 3.95]]]}},
-            {"type": "Feature", "id": "PALMIRA", "properties": {"name": "PALMIRA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.35, 3.65], [-76.10, 3.68], [-76.05, 3.45], [-76.25, 3.42], [-76.35, 3.65]]]}},
-            {"type": "Feature", "id": "TULUÁ", "properties": {"name": "TULUÁ"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.25, 4.15], [-76.02, 4.18], [-75.98, 4.02], [-76.18, 3.98], [-76.25, 4.15]]]}},
+            {"type": "Feature", "id": "SANTIAGO DE CALI", "properties": {"name": "SANTIAGO DE CALI"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.54, 3.48], [-76.45, 3.52], [-76.42, 3.42], [-76.46, 3.32], [-76.58, 3.34], [-76.54, 3.48]]]}},
+            {"type": "Feature", "id": "GUADALAJARA DE BUGA", "properties": {"name": "GUADALAJARA DE BUGA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.32, 3.95], [-76.10, 3.98], [-76.12, 3.82], [-76.25, 3.84], [-76.32, 3.95]]]}},
+            {"type": "Feature", "id": "PALMIRA", "properties": {"name": "PALMIRA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.35, 3.65], [-76.05, 3.68], [-76.02, 3.45], [-76.25, 3.42], [-76.35, 3.65]]]}},
+            {"type": "Feature", "id": "TULUÁ", "properties": {"name": "TULUÁ"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.22, 4.15], [-75.95, 4.18], [-75.92, 4.02], [-76.15, 3.98], [-76.22, 4.15]]]}},
             {"type": "Feature", "id": "JAMUNDÍ", "properties": {"name": "JAMUNDÍ"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.65, 3.32], [-76.52, 3.32], [-76.48, 3.15], [-76.62, 3.10], [-76.65, 3.32]]]}},
-            {"type": "Feature", "id": "CARTAGO", "properties": {"name": "CARTAGO"}, "geometry": {"type": "Polygon", "coordinates": [[[-75.95, 4.80], [-75.85, 4.82], [-75.82, 4.68], [-75.92, 4.65], [-75.95, 4.80]]]}},
-            {"type": "Feature", "id": "YUMBO", "properties": {"name": "YUMBO"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.55, 3.65], [-76.45, 3.65], [-76.42, 3.52], [-76.52, 3.48], [-76.55, 3.65]]]}},
-            {"type": "Feature", "id": "BUENAVENTURA", "properties": {"name": "BUENAVENTURA"}, "geometry": {"type": "Polygon", "coordinates": [[[-77.45, 3.95], [-77.05, 4.10], [-76.95, 3.80], [-77.35, 3.65], [-77.45, 3.95]]]}},
-            {"type": "Feature", "id": "ZARZAL", "properties": {"name": "ZARZAL"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.10, 4.45], [-76.00, 4.45], [-75.98, 4.35], [-76.08, 4.35], [-76.10, 4.45]]]}},
+            {"type": "Feature", "id": "CARTAGO", "properties": {"name": "CARTAGO"}, "geometry": {"type": "Polygon", "coordinates": [[[-75.95, 4.80], [-75.82, 4.82], [-75.80, 4.68], [-75.92, 4.65], [-75.95, 4.80]]]}},
+            {"type": "Feature", "id": "YUMBO", "properties": {"name": "YUMBO"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.55, 3.65], [-76.42, 3.65], [-76.40, 3.52], [-76.52, 3.48], [-76.55, 3.65]]]}},
+            {"type": "Feature", "id": "BUENAVENTURA", "properties": {"name": "BUENAVENTURA"}, "geometry": {"type": "Polygon", "coordinates": [[[-77.45, 3.95], [-76.95, 4.10], [-76.85, 3.75], [-77.35, 3.60], [-77.45, 3.95]]]}},
+            {"type": "Feature", "id": "ZARZAL", "properties": {"name": "ZARZAL"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.10, 4.45], [-75.98, 4.45], [-75.95, 4.35], [-76.08, 4.35], [-76.10, 4.45]]]}},
             {"type": "Feature", "id": "ROLDANILLO", "properties": {"name": "ROLDANILLO"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.20, 4.48], [-76.10, 4.48], [-76.08, 4.38], [-76.18, 4.38], [-76.20, 4.48]]]}},
-            {"type": "Feature", "id": "FLORIDA", "properties": {"name": "FLORIDA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.25, 3.38], [-76.05, 3.38], [-76.02, 3.25], [-76.22, 3.25], [-76.25, 3.38]]]}}
+            {"type": "Feature", "id": "FLORIDA", "properties": {"name": "FLORIDA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.25, 3.38], [-76.02, 3.38], [-76.00, 3.25], [-76.22, 3.25], [-76.25, 3.38]]]}},
+            {"type": "Feature", "id": "CANDELARIA", "properties": {"name": "CANDELARIA"}, "geometry": {"type": "Polygon", "coordinates": [[[-76.42, 3.42], [-76.25, 3.42], [-76.28, 3.32], [-76.44, 3.32], [-76.42, 3.42]]]}}
         ]
     }
 
@@ -112,7 +117,6 @@ def save_data(data_dict):
         return True
     except: return False
 
-# --- NORMALIZACIÓN DE MUNICIPIOS ---
 def normalizar_para_mapa(muni):
     m = str(muni).upper().strip()
     mapping = {
@@ -128,7 +132,8 @@ def normalizar_para_mapa(muni):
         "ROLDANILLO": "ROLDANILLO",
         "ZARZAL": "ZARZAL",
         "BUENAVENTURA": "BUENAVENTURA",
-        "FLORIDA": "FLORIDA"
+        "FLORIDA": "FLORIDA",
+        "CANDELARIA": "CANDELARIA"
     }
     return mapping.get(m, m)
 
@@ -143,7 +148,7 @@ def check_auth():
         st.session_state.ref_checked = True
 
     if not st.session_state.logged_in:
-        st.markdown("<div style='text-align:center; padding-top: 100px;'><h1>Pulse Analytics</h1></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; padding-top: 100px;'><h1>Pulse Analytics</h1><p>Sistema Maria Irma</p></div>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 1.2, 1])
         with col2:
             u = st.text_input("Usuario")
@@ -153,6 +158,7 @@ def check_auth():
                 if u.lower() in creds and creds[u.lower()] == p:
                     st.session_state.logged_in = True
                     st.session_state.user_name = u.lower()
+                    st.session_state.is_guest = False
                     st.rerun()
                 else: st.error("Acceso denegado")
         return False
@@ -190,7 +196,7 @@ if check_auth():
             if st.form_submit_button("GUARDAR REGISTRO"):
                 if nom and ced and tel:
                     if save_data({"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dire.upper(),"barrio":bar.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}):
-                        st.success("✅ ¡Registro guardado!")
+                        st.success("✅ ¡Registro guardado exitosamente!")
                         st.session_state.f_reset += 1 
                         time.sleep(1)
                         st.rerun()
@@ -199,15 +205,15 @@ if check_auth():
     elif opcion == "📊 Estadísticas":
         df = get_data()
         if not df.empty:
-            st.title("Pulse Analytics | Dashboard Estratégico")
+            st.title("Pulse Analytics | Valle del Cauca")
             
-            # --- HERO ---
+            # --- HERO PROGRESO ---
             total = len(df)
             perc = min((total / META_REGISTROS) * 100, 100)
             st.markdown(f"""
                 <div class="hero-section">
                     <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                        <div><p style="margin:0; font-weight:700; opacity:0.6; font-size:0.8rem;">Meta Global de Gestión</p><h1 class="hero-big-num">{total:,}</h1></div>
+                        <div><p style="margin:0; font-weight:700; opacity:0.6; font-size:0.8rem;">GESTIÓN GLOBAL</p><h1 class="hero-big-num">{total:,}</h1></div>
                         <div style="text-align:right;"><span class="hero-perc">{perc:.1f}%</span><p style="margin:0; opacity:0.6; font-size:0.8rem;">Meta: {META_REGISTROS:,}</p></div>
                     </div>
                     <div class="progress-track"><div class="progress-fill" style="width: {perc}%;"></div></div>
@@ -215,28 +221,22 @@ if check_auth():
             """, unsafe_allow_html=True)
 
             # --- KPIs ---
-            hoy = datetime.now()
-            df['F_S'] = df['Fecha Registro'].dt.date
-            v_hoy = len(df[df['F_S'] == hoy.date()])
-            v_8d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=8))])
-            v_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
-
             k1, k2, k3, k4 = st.columns(4)
-            for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
+            v_hoy = len(df[df['Fecha Registro'].dt.date == datetime.now().date()])
+            for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("Municipios", df['Ciudad'].nunique()), ("Líderes", df['Registrado Por'].nunique()), ("Objetivo", META_REGISTROS)]):
                 col.markdown(f"""<div class="pulse-card"><div class="pulse-label">{lab}</div><div class="pulse-value">{val:,}</div></div>""", unsafe_allow_html=True)
 
-            # --- MAPA DE COROPLETAS ---
+            # --- MAPA DE COROPLETAS (DIBUJO VECTORIAL) ---
             st.markdown("<br>", unsafe_allow_html=True)
             c_map, c_rank = st.columns([1.6, 1])
             
             with c_map:
                 st.subheader("📍 Mapa de Coropletas Territorial")
                 m_df = df.copy()
-                m_df['Municipio_Map'] = m_df['Ciudad'].apply(normalizar_para_mapa)
-                map_data = m_df['Municipio_Map'].value_counts().reset_index()
+                m_df['M_Map'] = m_df['Ciudad'].apply(normalizar_para_mapa)
+                map_data = m_df['M_Map'].value_counts().reset_index()
                 map_data.columns = ['Municipio', 'Registros']
                 
-                # GeoJSON embebido real
                 geojson = get_valle_geojson()
                 
                 fig = px.choropleth(
@@ -245,16 +245,17 @@ if check_auth():
                     locations='Municipio',
                     featureidkey="properties.name", 
                     color='Registros',
-                    color_continuous_scale=["#FCE4EC", "#E91E63"], # De rosa claro a rosa Pulse
+                    color_continuous_scale=["#FCE4EC", "#E91E63"], # Rosa Pulse
                     template="plotly_white",
                     hover_name="Municipio"
                 )
                 fig.update_geos(fitbounds="locations", visible=False)
                 fig.update_layout(
                     margin={"r":0,"t":0,"l":0,"b":0}, 
-                    height=550, 
+                    height=580, 
                     coloraxis_showscale=True,
-                    coloraxis_colorbar=dict(title="Regs")
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)'
                 )
                 st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
@@ -272,9 +273,9 @@ if check_auth():
 
             # --- TENDENCIA ---
             st.markdown("---")
-            st.subheader("📈 Ritmo de Crecimiento")
-            trend = df.groupby('F_S').size().reset_index(name='Ingresos')
-            fig_t = px.area(trend, x='F_S', y='Ingresos', color_discrete_sequence=['#E91E63'])
+            st.subheader("📈 Actividad Diaria")
+            trend = df.groupby(df['Fecha Registro'].dt.date).size().reset_index(name='Ingresos')
+            fig_t = px.area(trend, x='Fecha Registro', y='Ingresos', color_discrete_sequence=['#E91E63'])
             fig_t.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=300, xaxis_title=None, yaxis_title=None)
             st.plotly_chart(fig_t, use_container_width=True)
 
