@@ -8,8 +8,8 @@ from io import BytesIO
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
-import requests
-import numpy as np
+import json
+import os
 
 # --- CONFIGURACIÓN GENERAL ---
 BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
@@ -130,8 +130,8 @@ def save_data(data_dict):
         ts = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
         user = st.session_state.get("user_name", "Anónimo")
         row = [ts, user, data_dict["nombre"], data_dict["cedula"], data_dict["telefono"],
-               data_dict["ocupacion"], data_dict["direccion"], data_dict["barrio"], 
-               data_dict["ciudad"], data_dict.get("puesto", "")]
+                data_dict["ocupacion"], data_dict["direccion"], data_dict["barrio"], 
+                data_dict["ciudad"], data_dict.get("puesto", "")]
         sh.sheet1.append_row(row)
         return True
     except: return False
@@ -139,10 +139,12 @@ def save_data(data_dict):
 # --- NORMALIZACIÓN DE MUNICIPIOS ---
 def normalizar_para_mapa(muni):
     m = str(muni).upper().strip()
-    # Mapeo exacto para los nombres en el archivo GeoJSON
+    # Mapeo exacto para los nombres en el archivo GeoJSON (basado en el campo MUNC_CNMBR)
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
+        "GUADALAJARA DE BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
+        "SANTIAGO DE CALI": "SANTIAGO DE CALI",
         "JAMUNDI": "JAMUNDÍ",
         "TULUA": "TULUÁ",
         "GUACARI": "GUACARÍ",
@@ -187,7 +189,7 @@ if "f_reset" not in st.session_state: st.session_state.f_reset = 0
 # --- DASHBOARD ---
 if check_auth():
     usuario = st.session_state.user_name
-    USUARIOS_ADMIN = ["fabian", "xammy", "brayan"]
+    USUARIOS_ADMIN = ["fabian", "xammy", "brayan", "diegomonta"]
     es_admin = usuario.lower() in USUARIOS_ADMIN and not st.session_state.get("is_guest", False)
 
     st.sidebar.markdown(f"<div style='background:#F1F5F9; padding:20px; border-radius:18px; margin-bottom:20px;'><p style='margin:0; font-size:0.75rem; font-weight:700; color:#64748B;'>SESIÓN PULSE</p><p style='margin:0; font-size:1.1rem; font-weight:800; color:#0F172A;'>{usuario.upper()}</p></div>", unsafe_allow_html=True)
@@ -256,7 +258,7 @@ if check_auth():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- MAPA RECONSTRUIDO CON URL DIRECTA DEL VALLE ---
+            # --- MAPA RECONSTRUIDO CON ARCHIVO LOCAL ---
             st.subheader("📍 Mapa de Calor y Concentración Territorial")
             
             m_df = df.copy()
@@ -270,19 +272,17 @@ if check_auth():
                 map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots"], horizontal=True)
                 
                 try:
-                    # Usamos una URL directa y verificada de GeoJSON para Valle del Cauca
-                    url_valle = "https://raw.githubusercontent.com/jsgonzalez66/D3-Quickstart/master/data/valle-del-cauca.json"
-                    response = requests.get(url_valle, timeout=15)
-                    
-                    if response.status_code == 200:
-                        valle_geojson = response.json()
+                    # CARGA DEL ARCHIVO LOCAL DESDE TU REPOSITORIO
+                    if os.path.exists('valle_del_cauca.json'):
+                        with open('valle_del_cauca.json', 'r', encoding='utf-8') as f:
+                            valle_geojson = json.load(f)
                         
                         # Renderizado del mapa
                         fig = px.choropleth(
                             map_data, 
                             geojson=valle_geojson, 
                             locations='Municipio',
-                            featureidkey="properties.name", # Llave estándar en archivos departamentales
+                            featureidkey="properties.MUNC_CNMBR", # Llave en tu archivo JSON
                             color='Registros',
                             color_continuous_scale="YlOrRd" if map_mode == "Coropleta Territorial" else "Reds",
                             template="plotly_white"
@@ -291,8 +291,10 @@ if check_auth():
                         fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
                         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                     else:
-                        st.error("No se pudo obtener el archivo del mapa. Mostrando tabla resumen.")
+                        st.error("⚠️ Archivo 'valle_del_cauca.json' no encontrado en el repositorio.")
+                        st.info("Asegúrate de haber subido el archivo JSON a la raíz de tu GitHub.")
                         st.dataframe(map_data)
+                        
                 except Exception as e:
                     st.error(f"Error técnico cargando mapa: {str(e)}")
 
@@ -303,7 +305,7 @@ if check_auth():
                     st.markdown(f"""
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 10px; background: white; border-radius: 12px; border: 1px solid #F1F5F9;">
                             <span style="font-weight: 600; color: #1E293B;">{row['Municipio']}</span>
-                            <span class="hotspot-pill">{row['Registros']} Registros</span>
+                            <span style="background: #FCE4EC; color: #E91E63; padding: 4px 10px; border-radius: 8px; font-size: 0.8rem; font-weight: 700;">{row['Registros']} Regs</span>
                         </div>
                     """, unsafe_allow_html=True)
                 st.metric("Cobertura", f"{len(map_data)} / 42 Municipios")
