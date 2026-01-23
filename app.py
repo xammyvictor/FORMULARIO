@@ -361,7 +361,7 @@ if check_auth():
                         # Calculamos centroides aproximados o simplemente usamos el dibujo como base
                         fig = px.choropleth(
                             map_data, geojson=geojson_data, locations='Municipio',
-                            featureidkey="properties.MPIO_CNMBR"", color='Registros',
+                            featureidkey="properties.MPIO_CNMBR", color='Registros',
                             color_continuous_scale="Reds", template="plotly_white"
                         )
                         # Añadimos puntos de calor (Burbujas) para resaltar municipios pequeños
