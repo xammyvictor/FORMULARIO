@@ -6,3 +6,5 @@ qrcode
 Pillow
 plotly
 requests
+folium
+streamlit-folium
