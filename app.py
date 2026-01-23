@@ -97,16 +97,6 @@ st.markdown("""
     /* Sidebar and UI */
     .stSidebar { background-color: white !important; border-right: 1px solid #E2E8F0; }
     .stButton>button { border-radius: 14px !important; background: var(--pulse-pink) !important; font-weight: 700 !important; color: white !important; border: none !important; width: 100%; height: 3.2rem; }
-    
-    .hotspot-pill {
-        padding: 4px 12px;
-        background: #FEF2F2;
-        color: #B91C1C;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 700;
-        border: 1px solid #FEE2E2;
-    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -291,7 +281,7 @@ if check_auth():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- MAPA RECONSTRUIDO CON VALIDACIÓN DE DATOS ---
+            # --- MAPA RECONSTRUIDO CON VERIFICACIÓN DE ESTRUCTURA ---
             st.subheader("📍 Mapa de Calor y Concentración Territorial")
             
             m_df = df.copy()
@@ -305,17 +295,26 @@ if check_auth():
                 map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots"], horizontal=True)
                 
                 try:
-                    # Usamos la URL nacional que es la más estable de GitHub
+                    # URL nacional estable
                     url_geojson = "https://raw.githubusercontent.com/marcovega/colombia-json/master/colombia.min.json"
                     response = requests.get(url_geojson, timeout=10)
                     
                     if response.status_code == 200:
-                        data_full = response.json()
+                        data_raw = response.json()
                         
+                        # --- SOLUCIÓN AL ERROR DE ÍNDICES ---
+                        # Verificamos si la respuesta es una lista o un diccionario
+                        if isinstance(data_raw, dict) and 'features' in data_raw:
+                            features_source = data_raw['features']
+                        elif isinstance(data_raw, list):
+                            features_source = data_raw
+                        else:
+                            features_source = []
+
                         # Filtramos los municipios del Valle
                         valle_features = [
-                            f for f in data_full['features'] 
-                            if f.get('properties', {}).get('DPTO_CNMBRE') == 'VALLE DEL CAUCA'
+                            f for f in features_source 
+                            if isinstance(f, dict) and f.get('properties', {}).get('DPTO_CNMBRE') == 'VALLE DEL CAUCA'
                         ]
                         
                         valle_geojson = {
@@ -323,34 +322,35 @@ if check_auth():
                             "features": valle_features
                         }
                         
-                        if map_mode == "Coropleta Territorial":
-                            fig = px.choropleth(
-                                map_data, 
-                                geojson=valle_geojson, 
-                                locations='Municipio',
-                                featureidkey="properties.MPIO_CNMBRE", 
-                                color='Registros',
-                                color_continuous_scale="YlOrRd",
-                                template="plotly_white",
-                                labels={'Registros': 'Total'}
-                            )
-                        else:
-                            fig = px.choropleth(
-                                map_data, geojson=valle_geojson, locations='Municipio',
-                                featureidkey="properties.MPIO_CNMBRE", color='Registros',
-                                color_continuous_scale="Reds", template="plotly_white"
-                            )
-                            fig.update_traces(marker_line_width=0.5, marker_line_color="white")
+                        if valle_features:
+                            if map_mode == "Coropleta Territorial":
+                                fig = px.choropleth(
+                                    map_data, 
+                                    geojson=valle_geojson, 
+                                    locations='Municipio',
+                                    featureidkey="properties.MPIO_CNMBRE", 
+                                    color='Registros',
+                                    color_continuous_scale="YlOrRd",
+                                    template="plotly_white",
+                                    labels={'Registros': 'Total'}
+                                )
+                            else:
+                                fig = px.choropleth(
+                                    map_data, geojson=valle_geojson, locations='Municipio',
+                                    featureidkey="properties.MPIO_CNMBRE", color='Registros',
+                                    color_continuous_scale="Reds", template="plotly_white"
+                                )
+                                fig.update_traces(marker_line_width=0.5, marker_line_color="white")
 
-                        fig.update_geos(fitbounds="locations", visible=False)
-                        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
-                        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                            fig.update_geos(fitbounds="locations", visible=False)
+                            fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
+                            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                        else:
+                            st.error("No se encontraron geometrías para el Valle del Cauca en este archivo.")
                     else:
-                        st.warning("⚠️ No se pudo obtener el mapa desde el servidor. Mostrando datos en tabla.")
-                        st.dataframe(map_data)
+                        st.warning("⚠️ El servidor de mapas no respondió correctamente.")
                 except Exception as e:
-                    st.error(f"Error técnico cargando mapa: {e}")
-                    st.info("Sugerencia: Revisa que la URL del GeoJSON sea correcta y devuelva un JSON válido.")
+                    st.error(f"Error procesando el mapa: {str(e)}")
 
             with c_map_stats:
                 st.markdown("<div style='padding-top: 50px;'></div>", unsafe_allow_html=True)
@@ -365,7 +365,7 @@ if check_auth():
                 
                 st.metric("Cobertura Regional", f"{len(map_data)} / 42 Municipios")
 
-            # --- SECCIONES FINALES ---
+            # --- RANKING Y TENDENCIA ---
             st.markdown("---")
             c_rank, c_trend = st.columns([1, 1.5])
             
