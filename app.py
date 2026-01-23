@@ -220,39 +220,51 @@ if check_auth():
     # --------------------------------------------------
     # ESTADÍSTICAS
     # --------------------------------------------------
-    elif opcion == "📊 Estadísticas":
-        df = get_data()
-        if df.empty:
-            st.warning("Sin datos")
-        else:
-            st.title("📊 Pulse Analytics | Valle")
+    with c_map_view:
+    map_mode = st.radio(
+        "Modo de Visualización:",
+        ["Coropleta Territorial", "Hotspots de Concentración"],
+        horizontal=True
+    )
 
-            total = len(df)
-            st.metric("Total Registros", total)
+    try:
+        geojson_url = (
+            "https://raw.githubusercontent.com/"
+            "caticoa3/colombia_mapa/master/"
+            "co_2018_MGN_MPIO_POLITICO.geojson"
+        )
+        geojson_data = requests.get(geojson_url).json()
 
-            df["Municipio_Map"] = df["Ciudad"].apply(normalizar_para_mapa)
-            map_data = df["Municipio_Map"].value_counts().reset_index()
-            map_data.columns = ["Municipio", "Registros"]
+        fig = px.choropleth(
+            map_data,
+            geojson=geojson_data,
+            locations="Municipio",
+            featureidkey="properties.NOM_MPIO",
+            color="Registros",
+            color_continuous_scale="YlOrRd",
+            template="plotly_white",
+            labels={"Registros": "Total Registros"}
+        )
 
-            geojson_url = (
-                "https://raw.githubusercontent.com/"
-                "caticoa3/colombia_mapa/master/"
-                "co_2018_MGN_MPIO_POLITICO.geojson"
+        fig.update_geos(fitbounds="locations", visible=False)
+        fig.update_layout(
+            margin={"r": 0, "t": 0, "l": 0, "b": 0},
+            height=600,
+            coloraxis_colorbar=dict(
+                title="Densidad",
+                thickness=15,
+                len=300
             )
-            geojson_data = requests.get(geojson_url).json()
+        )
 
-            fig = px.choropleth(
-                map_data,
-                geojson=geojson_data,
-                locations="Municipio",
-                featureidkey="properties.NOM_MPIO",
-                color="Registros",
-                color_continuous_scale="YlOrRd"
-            )
-            fig.update_geos(fitbounds="locations", visible=False)
-            fig.update_layout(height=600, margin=dict(l=0, r=0, t=0, b=0))
+        st.plotly_chart(
+            fig,
+            use_container_width=True,
+            config={"displayModeBar": False}
+        )
 
-            st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        st.error(f"Error al cargar el mapa: {e}")
 
     # --------------------------------------------------
     # BÚSQUEDA
