@@ -10,6 +10,10 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import requests
 import numpy as np
+import urllib3
+
+# Deshabilitar advertencias de peticiones inseguras para máxima compatibilidad
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- CONFIGURACIÓN GENERAL ---
 BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
@@ -152,24 +156,49 @@ def normalizar_muni(muni):
         "GINEBRA": "GINEBRA",
         "LA UNION": "LA UNIÓN",
         "SEVILLA": "SEVILLA",
-        "CAICEDONIA": "CAICEDONIA"
+        "CAICEDONIA": "CAICEDONIA",
+        "ANSERMANUEVO": "ANSERMANUEVO",
+        "ARGELIA": "ARGELIA",
+        "BOLIVAR": "BOLÍVAR",
+        "BUENAVENTURA": "BUENAVENTURA",
+        "BUGALAGRANDE": "BUGALAGRANDE",
+        "CALIMA EL DARIEN": "CALIMA",
+        "CANDELARIA": "CANDELARIA",
+        "DAGUA": "DAGUA",
+        "EL AGUILA": "EL ÁGUILA",
+        "EL CAIRO": "EL CAIRO",
+        "EL DOVIO": "EL DOVIO",
+        "GUACARI": "GUACARÍ",
+        "LA CUMBRE": "LA CUMBRE",
+        "LA VICTORIA": "LA VICTORIA",
+        "OBANDO": "OBANDO",
+        "RESTREPO": "RESTREPO",
+        "RIOFRIO": "RIOFRIO",
+        "SAN PEDRO": "SAN PEDRO",
+        "TORO": "TORO",
+        "TRUJILLO": "TRUJILLO",
+        "ULLOA": "ULLOA",
+        "VERSALLES": "VERSALLES",
+        "VIJES": "VIJES",
+        "YOTOCO": "YOTOCO"
     }
     return mapping.get(m, m)
 
-# --- CARGA DE GEOJSON (OPTIMIZADO CON CDN Y RESILIENCIA) ---
+# --- CARGA DE GEOJSON (MAXIMA RESILIENCIA) ---
 @st.cache_data(ttl=3600)
 def load_valle_geojson():
-    # Usamos jsDelivr como fuente primaria (es un CDN más estable que GitHub Raw)
     urls = [
+        "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json",
         "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json",
-        "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json"
+        "https://gist.githubusercontent.com/john-guerra/43c7656821069d00dcbc/raw/be381f21d3f381c8286a0740685970c6a51d45a9/valle.json"
     ]
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
     for url in urls:
         try:
-            r = requests.get(url, timeout=10)
+            r = requests.get(url, headers=headers, timeout=10, verify=False)
             if r.status_code == 200:
                 return r.json()
-        except Exception as e:
+        except:
             continue
     return None
 
