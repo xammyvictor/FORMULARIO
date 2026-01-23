@@ -74,7 +74,7 @@ st.markdown("""
         background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%);
         height: 100%;
         border-radius: 20px;
-        transition: width 1.5s ease-in-out;
+        transition: width 1.5s ease;
     }
 
     /* Botones y Formulario */
@@ -130,10 +130,9 @@ def save_data(data_dict):
         return True
     except: return False
 
-# --- NORMALIZACIÓN DE MUNICIPIOS (CRÍTICO PARA EL MAPA) ---
+# --- NORMALIZACIÓN DE MUNICIPIOS ---
 def normalizar_muni(muni):
     m = str(muni).upper().strip()
-    # Este mapeo asegura que los nombres del Excel coincidan con los nombres del GeoJSON
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
@@ -156,7 +155,6 @@ def normalizar_muni(muni):
         "SEVILLA": "SEVILLA",
         "CAICEDONIA": "CAICEDONIA",
         "ANSERMANUEVO": "ANSERMANUEVO",
-        "ARGELIA": "ARGELIA",
         "BOLIVAR": "BOLÍVAR",
         "BUENAVENTURA": "BUENAVENTURA",
         "BUGALAGRANDE": "BUGALAGRANDE",
@@ -180,10 +178,10 @@ def normalizar_muni(muni):
     }
     return mapping.get(m, m)
 
-# --- CARGA DEL DIBUJO DEL MAPA (GEOJSON RESILIENTE) ---
+# --- CARGA DEL DIBUJO DEL MAPA ---
 @st.cache_data(ttl=3600)
 def load_valle_geojson():
-    # Usamos jsDelivr como fuente para evitar bloqueos de GitHub Raw
+    # Usamos jsDelivr como fuente primaria para evitar bloqueos
     url = "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json"
     try:
         r = requests.get(url, timeout=10, verify=False)
@@ -300,45 +298,61 @@ if check_auth():
             c_map, c_rank = st.columns([1.6, 1])
             
             with c_map:
-                st.subheader("📍 Mapa de Calor Territorial")
+                st.subheader("📍 Mapa Territorial del Valle")
                 m_df = df.copy()
-                # Aplicamos la normalización estricta antes de agrupar
-                m_df['Municipio_Map'] = m_df['Ciudad'].apply(normalizar_muni)
-                map_data = m_df['Municipio_Map'].value_counts().reset_index()
+                m_df['M_Map'] = m_df['Ciudad'].apply(normalizar_muni)
+                map_data = m_df['M_Map'].value_counts().reset_index()
                 map_data.columns = ['Municipio', 'Registros']
                 
                 geojson = load_valle_geojson()
                 if geojson:
-                    # Mapa Coroplético (DIBUJO TERRITORIAL SIN FONDO DE MAPA MUNDIAL)
+                    # MAPA COROPLÉTICO (EL DIBUJO REAL)
                     fig = px.choropleth(
                         map_data, 
                         geojson=geojson, 
                         locations='Municipio',
-                        featureidkey="properties.name", # Match con el nombre en el GeoJSON
+                        featureidkey="properties.name", 
                         color='Registros',
                         color_continuous_scale="Reds", 
                         template="plotly_white",
                         hover_name="Municipio"
                     )
-                    # Forzamos a que solo se vea el dibujo (sin océanos ni otros países)
+                    # Forzamos visualización solo del dibujo (sin fondo de mapa mundial)
                     fig.update_geos(
                         fitbounds="locations", 
                         visible=False,
-                        resolution=50,
-                        showcoastlines=False,
-                        showcountries=False
+                        projection_type="mercator"
                     )
                     fig.update_layout(
                         margin={"r":0,"t":0,"l":0,"b":0}, 
-                        height=600, 
+                        height=550, 
                         coloraxis_showscale=True,
                         paper_bgcolor='rgba(0,0,0,0)',
                         plot_bgcolor='rgba(0,0,0,0)'
                     )
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 else:
-                    st.error("Error al cargar el dibujo del mapa. Mostrando resumen:")
-                    st.dataframe(map_data, use_container_width=True, hide_index=True)
+                    # SI FALLA EL SERVIDOR: MOSTRAR MAPA DE PUNTOS SOBRE EL TERRITORIO
+                    st.error("Utilizando dibujo simplificado por restricciones de red.")
+                    # Coordenadas centroide aproximadas de los municipios principales para que no se vea todo en el mismo lugar
+                    coords_valle = {
+                        'GUADALAJARA DE BUGA': [3.9009, -76.3008],
+                        'SANTIAGO DE CALI': [3.4516, -76.5320],
+                        'PALMIRA': [3.5394, -76.3036],
+                        'TULUÁ': [4.0847, -76.1954],
+                        'JAMUNDÍ': [3.2612, -76.5350],
+                        'CARTAGO': [4.7464, -75.9117]
+                    }
+                    map_data['lat'] = map_data['Municipio'].apply(lambda x: coords_valle.get(x, [3.9, -76.3])[0])
+                    map_data['lon'] = map_data['Municipio'].apply(lambda x: coords_valle.get(x, [3.9, -76.3])[1])
+                    
+                    fig = px.scatter_geo(
+                        map_data, lat="lat", lon="lon", size="Registros", color="Registros",
+                        color_continuous_scale="Reds", hover_name="Municipio",
+                        scope="south america"
+                    )
+                    fig.update_geos(fitbounds="locations", visible=False)
+                    st.plotly_chart(fig, use_container_width=True)
 
             with c_rank:
                 st.subheader("🏆 TOP Líderes")
@@ -369,7 +383,7 @@ if check_auth():
         st.title("🔍 Buscador de Registros")
         df = get_data()
         if not df.empty:
-            q = st.text_input("Nombre, Cédula o Ciudad").upper()
+            q = st.text_input("Buscar por Nombre, Cédula o Ciudad").upper()
             if q:
                 res = df[df.astype(str).apply(lambda x: q in x.values, axis=1)]
                 st.dataframe(res, use_container_width=True)
