@@ -37,7 +37,6 @@ st.markdown("""
     
     .stApp { background-color: var(--pulse-bg); }
 
-    /* Hero Meta Section */
     .pulse-hero {
         background: var(--pulse-dark);
         color: white;
@@ -66,7 +65,6 @@ st.markdown("""
         transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    /* KPI Cards */
     .pulse-kpi-card {
         background: white;
         padding: 24px;
@@ -77,7 +75,6 @@ st.markdown("""
     .kpi-label { color: var(--pulse-slate); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
     .kpi-val { color: var(--pulse-dark); font-size: 2.4rem; font-weight: 800; line-height: 1; }
 
-    /* Ranking Items */
     .rank-item {
         display: flex;
         justify-content: space-between;
@@ -92,11 +89,6 @@ st.markdown("""
     .rank-name { font-weight: 700; color: #1E293B; font-size: 0.95rem; }
     .rank-badge { background: #F8FAFC; color: #64748B; padding: 6px 14px; border-radius: 12px; font-weight: 700; font-size: 0.8rem; border: 1px solid #E2E8F0; }
 
-    /* Forms & Sidebar */
-    .stSidebar { background-color: white !important; border-right: 1px solid #E2E8F0; }
-    .stButton>button { border-radius: 14px !important; background: var(--pulse-pink) !important; font-weight: 700 !important; color: white !important; border: none !important; width: 100%; height: 3.2rem; }
-    
-    /* Hotspot Pill */
     .hotspot-pill {
         padding: 4px 12px;
         background: #FEF2F2;
@@ -126,8 +118,8 @@ def get_data():
         sh = client.open("Base_Datos_Ciudadanos")
         df = pd.DataFrame(sh.sheet1.get_all_records())
         if not df.empty:
-            df['Fecha Registro'] = pd.to_datetime(df['Fecha Registro'], errors='coerce')
             df.columns = [c.strip() for c in df.columns]
+            df['Fecha Registro'] = pd.to_datetime(df['Fecha Registro'], errors='coerce')
         return df
     except: return pd.DataFrame()
 
@@ -148,13 +140,6 @@ def save_data(data_dict):
 # --- AUTH ---
 def check_auth():
     if "logged_in" not in st.session_state: st.session_state.logged_in = False
-    params = st.query_params
-    if "ref" in params and "ref_checked" not in st.session_state:
-        st.session_state.logged_in = True
-        st.session_state.user_name = params["ref"]
-        st.session_state.is_guest = True
-        st.session_state.ref_checked = True
-
     if not st.session_state.logged_in:
         st.markdown("<div style='text-align:center; padding-top: 80px;'><h1>Pulse Analytics</h1><p>Gestión Maria Irma</p></div>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 1.4, 1])
@@ -166,7 +151,6 @@ def check_auth():
                 if u.lower() in creds and creds[u.lower()] == p:
                     st.session_state.logged_in = True
                     st.session_state.user_name = u.lower()
-                    st.session_state.is_guest = False
                     st.rerun()
                 else: st.error("Acceso Denegado")
         return False
@@ -178,7 +162,7 @@ if "f_reset" not in st.session_state: st.session_state.f_reset = 0
 if check_auth():
     usuario = st.session_state.user_name
     USUARIOS_ADMIN = ["fabian", "xammy", "brayan", "diegomonta"]
-    es_admin = usuario.lower() in USUARIOS_ADMIN and not st.session_state.get("is_guest", False)
+    es_admin = usuario.lower() in USUARIOS_ADMIN
 
     st.sidebar.markdown(f"<div style='background:#F1F5F9; padding:20px; border-radius:18px; margin-bottom:20px;'><p style='margin:0; font-size:0.75rem; font-weight:700; color:#64748B;'>SESIÓN PULSE</p><p style='margin:0; font-size:1.1rem; font-weight:800; color:#0F172A;'>{usuario.upper()}</p></div>", unsafe_allow_html=True)
     opcion = st.sidebar.radio("MENÚ PRINCIPAL", ["📝 Registro", "📊 Estadísticas", "🔍 Búsqueda"] if es_admin else ["📝 Registro"])
@@ -236,14 +220,13 @@ if check_auth():
             """, unsafe_allow_html=True)
 
             # --- 2. KPIs ---
-            hoy = datetime.now()
+            hoy = datetime.now().date()
             df['F_S'] = df['Fecha Registro'].dt.date
-            v_hoy = len(df[df['F_S'] == hoy.date()])
-            v_8d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=8))])
-            v_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
+            v_hoy = len(df[df['F_S'] == hoy])
+            v_8d = len(df[df['Fecha Registro'] > (datetime.now() - timedelta(days=8))])
 
             k1, k2, k3, k4 = st.columns(4)
-            for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
+            for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("Últimos 8 días", v_8d), ("Total", total), ("Municipios", df['Ciudad'].nunique())]):
                 col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
@@ -251,15 +234,15 @@ if check_auth():
             # --- 3. MAPA ---
             st.subheader("📍 Concentración Territorial")
             
-            # Agrupación directa por el nombre del municipio en la base de datos
-            map_data = df['Ciudad'].str.upper().str.strip().value_counts().reset_index()
+            # Limpiamos solo espacios y aseguramos que el tipo de dato sea String
+            m_df = df.copy()
+            m_df['Municipio_Map'] = m_df['Ciudad'].astype(str).str.strip()
+            map_data = m_df['Municipio_Map'].value_counts().reset_index()
             map_data.columns = ['Municipio', 'Registros']
             
             c_map_view, c_map_stats = st.columns([2, 1])
             
             with c_map_view:
-                map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots"], horizontal=True)
-                
                 try:
                     geojson_url = "https://raw.githubusercontent.com/finiterank/mapa-colombia-js/master/colombia-municipios.json"
                     response = requests.get(geojson_url)
@@ -271,28 +254,36 @@ if check_auth():
                         locations='Municipio',
                         featureidkey="properties.name", 
                         color='Registros',
-                        color_continuous_scale="Reds" if map_mode == "Hotspots" else "YlOrRd",
+                        color_continuous_scale="YlOrRd",
                         template="plotly_white"
                     )
 
-                    fig.update_geos(fitbounds="locations", visible=False)
-                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
+                    fig.update_geos(
+                        fitbounds="locations", 
+                        visible=False
+                    )
+                    
+                    fig.update_layout(
+                        margin={"r":0,"t":0,"l":0,"b":0}, 
+                        height=550,
+                        coloraxis_colorbar=dict(title="Registros", thickness=15)
+                    )
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-                except:
-                    st.info("Cargando mapa base...")
+                except Exception as e:
+                    st.info("No se pudo cargar el mapa. Verifique la conexión o el formato de los datos.")
 
             with c_map_stats:
                 st.markdown("<div style='padding-top: 20px;'></div>", unsafe_allow_html=True)
-                st.write("**🔥 Actividad por Municipio**")
+                st.write("**🔥 Cobertura Actual**")
                 for _, row in map_data.head(10).iterrows():
                     st.markdown(f"""
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 10px; background: white; border-radius: 12px; border: 1px solid #F1F5F9;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 12px; background: white; border-radius: 12px; border: 1px solid #F1F5F9;">
                             <span style="font-weight: 600; color: #1E293B; font-size: 0.85rem;">{row['Municipio']}</span>
                             <span class="hotspot-pill">{row['Registros']} regs</span>
                         </div>
                     """, unsafe_allow_html=True)
 
-            # --- 4. RANKING Y TENDENCIA ---
+            # --- 4. RANKING ---
             st.markdown("---")
             c_rank, c_trend = st.columns([1, 1.5])
             
@@ -319,10 +310,10 @@ if check_auth():
                 st.plotly_chart(fig_trend, use_container_width=True)
 
     elif opcion == "🔍 Búsqueda":
-        st.title("🔍 Explorador de Registros")
+        st.title("🔍 Explorador")
         df = get_data()
         if not df.empty:
-            q = st.text_input("Buscar por nombre, cédula o municipio...").upper()
+            q = st.text_input("Buscar...").upper()
             if q:
                 res = df[df.astype(str).apply(lambda x: q in x.values, axis=1)]
                 st.dataframe(res, use_container_width=True)
