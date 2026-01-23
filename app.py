@@ -14,58 +14,95 @@ BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
 META_REGISTROS = 12000
 
 st.set_page_config(
-    page_title="Dashboard Maria Irma - Gestión Ciudadana",
-    page_icon="📊",
+    page_title="Maria Irma | Analytics",
+    page_icon="📈",
     layout="wide"
 )
 
-# --- ESTILOS VISUALES ---
+# --- ESTILOS VISUALES (Leader Pulse Style) ---
 st.markdown("""
     <style>
-    .stApp { background-color: #FFFFFF !important; color: #333333 !important; }
-    h1, h2, h3 { color: #D81B60 !important; text-align: center; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
-    .stMetric { background-color: #FCE4EC; padding: 15px; border-radius: 10px; border: 1px solid #F8BBD0; }
-    .leader-card { padding: 10px; border-radius: 5px; background-color: #F8F9FA; margin-bottom: 5px; border-left: 5px solid #E91E63; }
-    [data-testid="stSidebar"] { background-color: #FCE4EC !important; }
-    .stProgress > div > div > div > div { background-color: #E91E63 !important; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    .stApp { background-color: #F8FAFC; }
+    
+    /* Tarjetas de Métricas */
+    .metric-card {
+        background-color: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        border: 1px solid #E2E8F0;
+        text-align: center;
+    }
+    .metric-title { color: #64748B; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; margin-bottom: 8px; }
+    .metric-value { color: #1E293B; font-size: 1.5rem; font-weight: 700; }
+    
+    /* Barra de Progreso */
+    .progress-container {
+        background-color: #E2E8F0;
+        border-radius: 20px;
+        height: 12px;
+        width: 100%;
+        margin: 10px 0;
+    }
+    .progress-bar {
+        background: linear-gradient(90deg, #E91E63 0%, #C2185B 100%);
+        height: 12px;
+        border-radius: 20px;
+    }
+    
+    /* Leader Cards */
+    .leader-tag {
+        background-color: #FCE4EC;
+        color: #C2185B;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.8rem;
+        display: inline-block;
+        margin: 4px;
+        border: 1px solid #F8BBD0;
+    }
+
+    h1, h2, h3 { color: #0F172A !important; font-weight: 700 !important; }
+    .stSidebar { background-color: #FFFFFF !important; border-right: 1px solid #E2E8F0; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- CONFIGURACIÓN DE GOOGLE SHEETS ---
+# --- GOOGLE SHEETS API ---
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 
 def get_google_sheet_client():
     try:
         if "gcp_service_account" not in st.secrets:
-            st.error("Error: Credenciales no encontradas.")
             return None
         creds_dict = st.secrets["gcp_service_account"]
         credentials = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
         return gspread.authorize(credentials)
-    except Exception as e:
-        st.error(f"Error de conexión: {e}")
-        return None
+    except Exception: return None
 
-def get_all_data(file_name="Base_Datos_Ciudadanos"):
+def get_all_data():
     client = get_google_sheet_client()
     if not client: return pd.DataFrame()
     try:
-        sh = client.open(file_name)
+        sh = client.open("Base_Datos_Ciudadanos")
         data = sh.sheet1.get_all_records()
         df = pd.DataFrame(data)
         if not df.empty:
-            df.columns = [str(c).strip() for c in df.columns]
-            # Convertir fecha a datetime
             df['Fecha Registro'] = pd.to_datetime(df['Fecha Registro'], errors='coerce')
         return df
-    except Exception:
-        return pd.DataFrame()
+    except Exception: return pd.DataFrame()
 
-def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
+def save_to_drive(data_dict):
     client = get_google_sheet_client()
     if not client: return False
     try:
-        sh = client.open(file_name)
+        sh = client.open("Base_Datos_Ciudadanos")
         worksheet = sh.sheet1
         timestamp = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
         usuario_actual = st.session_state.get("user_name", "Desconocido")
@@ -74,16 +111,14 @@ def save_to_drive(data_dict, file_name="Base_Datos_Ciudadanos"):
                data_dict["barrio"], data_dict["ciudad"], data_dict.get("puesto", "")]
         worksheet.append_row(row)
         return True
-    except Exception as e:
-        st.error(f"Error al guardar: {e}")
-        return False
+    except Exception: return False
 
-# --- LÓGICA DE SESIÓN ---
+# --- SESIÓN ---
 def check_session():
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
     
-    # Manejo de referido por URL
+    # Referido por URL
     try:
         params = st.query_params
         if "ref" in params and "query_checked" not in st.session_state:
@@ -94,169 +129,185 @@ def check_session():
     except: pass
 
     if not st.session_state.logged_in:
-        st.title("🔐 Acceso al Sistema")
-        with st.form("login"):
-            u = st.text_input("Usuario").lower().strip()
+        st.title("🔐 Acceso Analytics")
+        with st.container():
+            u = st.text_input("Usuario")
             p = st.text_input("Contraseña", type="password")
-            if st.form_submit_button("Entrar"):
+            if st.button("Iniciar Sesión"):
                 creds = {"fabian": "1234", "xammy": "1234", "brayan": "1234", "diegomonta": "1234"}
-                if u in creds and creds[u] == p:
+                if u.lower() in creds and creds[u.lower()] == p:
                     st.session_state.logged_in = True
-                    st.session_state.user_name = u
+                    st.session_state.user_name = u.lower()
                     st.session_state.is_guest = False
                     st.rerun()
-                else: st.error("Error de acceso")
+                else: st.error("Acceso Denegado")
         return False
     return True
 
 if "form_reset_key" not in st.session_state:
     st.session_state.form_reset_key = 0
 
-# --- APP PRINCIPAL ---
+# --- DASHBOARD ---
 if check_session():
     usuario = st.session_state.user_name
     USUARIOS_ADMIN = ["fabian", "xammy", "brayan"]
     es_admin = usuario.lower() in USUARIOS_ADMIN and not st.session_state.get("is_guest", False)
 
-    st.sidebar.title(f"👤 {usuario.capitalize()}")
-    opciones = ["📝 Registro", "🔍 Búsqueda", "📊 Estadísticas"] if es_admin else ["📝 Registro"]
-    opcion = st.sidebar.radio("Menú", opciones)
-
-    if st.sidebar.button("Salir"):
+    # Sidebar Moderno
+    st.sidebar.markdown(f"### ⚡ **{usuario.capitalize()}**")
+    st.sidebar.markdown("---")
+    opcion = st.sidebar.radio("Navegación", ["📝 Registro", "🔍 Búsqueda", "📊 Estadísticas"] if es_admin else ["📝 Registro"])
+    
+    if st.sidebar.button("Cerrar Sesión"):
         st.session_state.clear()
         st.rerun()
 
-    # --- MÓDULO DE REGISTRO ---
     if opcion == "📝 Registro":
-        st.title("🗳️ Registro de Ciudadano")
-        with st.form(key=f"reg_{st.session_state.form_reset_key}"):
+        st.title("🗳️ Nuevo Registro")
+        with st.form(key=f"reg_form_{st.session_state.form_reset_key}"):
             c1, c2 = st.columns(2)
             with c1:
-                nom = st.text_input("Nombre Completo")
+                nom = st.text_input("Nombre")
                 ced = st.text_input("Cédula")
                 tel = st.text_input("Teléfono")
             with c2:
                 ocu = st.text_input("Ocupación")
-                dir = st.text_input("Dirección")
-                bar = st.text_input("Barrio")
-            ciu = st.text_input("Municipio", value="BUGA")
+                dire = st.text_input("Dirección")
+                barr = st.text_input("Barrio")
+            ciu = st.text_input("Ciudad", value="BUGA")
             pue = st.text_input("Puesto (Opcional)")
             
-            if st.form_submit_button("✅ Guardar"):
-                if all([nom, ced, tel, ciu]):
-                    data = {"nombre": nom.upper(), "cedula": ced, "telefono": tel, 
-                            "ocupacion": ocu.upper(), "direccion": dir.upper(), 
-                            "barrio": bar.upper(), "ciudad": ciu.upper(), "puesto": pue.upper()}
-                    if save_to_drive(data):
-                        st.success("Guardado correctamente")
+            if st.form_submit_button("✅ Guardar Registro"):
+                if nom and ced and tel:
+                    if save_to_drive({"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dire.upper(),"barrio":barr.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}):
+                        st.success("¡Registro Exitoso!")
                         st.session_state.form_reset_key += 1
-                        time.sleep(1)
+                        time.sleep(1.5)
                         st.rerun()
-                else: st.warning("Complete los campos obligatorios")
+                else: st.warning("Nombre, Cédula y Teléfono son obligatorios")
 
-    # --- MÓDULO DE ESTADÍSTICAS ---
     elif opcion == "📊 Estadísticas":
-        st.title("📊 Panel de Control y Metas")
         df = get_all_data()
         
         if not df.empty:
-            # 1. BARRA DE PROGRESO Y METRICAS TEMPORALES
+            st.title("📊 Análisis de Gestión en Tiempo Real")
+            
+            # --- 1. PROGRESO Y KPIs ---
             total_actual = len(df)
-            porcentaje = min(total_actual / META_REGISTROS, 1.0)
+            progreso = min(total_actual / META_REGISTROS, 1.0)
             
-            st.subheader(f"Progreso hacia la Meta: {total_actual:,} / {META_REGISTROS:,}")
-            st.progress(porcentaje)
-            
-            # Cálculos de tiempo
+            st.markdown(f"""
+                <div style="background-color: white; padding: 25px; border-radius: 15px; border: 1px solid #E2E8F0; margin-bottom: 25px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="font-weight: 700; color: #1E293B;">PROGRESO HACIA LA META</span>
+                        <span style="font-weight: 700; color: #E91E63; font-size: 1.2rem;">{total_actual:,} / {META_REGISTROS:,}</span>
+                    </div>
+                    <div class="progress-container">
+                        <div class="progress-bar" style="width: {progreso*100}%;"></div>
+                    </div>
+                    <p style="color: #64748B; font-size: 0.85rem; margin-top: 10px;">Equivale al {progreso*100:.1f}% del objetivo general.</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+            # Cálculo de tiempos
             hoy = datetime.now()
-            df['Fecha'] = df['Fecha Registro'].dt.date
-            reg_hoy = len(df[df['Fecha'] == hoy.date()])
-            reg_8d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=8))])
-            reg_15d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=15))])
-            reg_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
-
-            col_t1, col_t2, col_t3, col_t4 = st.columns(4)
-            col_t1.metric("Hoy", f"{reg_hoy}")
-            col_t2.metric("Últimos 8 días", f"{reg_8d}")
-            col_t3.metric("Últimos 15 días", f"{reg_15d}")
-            col_t4.metric("Últimos 30 días", f"{reg_30d}")
-
-            st.markdown("---")
-
-            # 2. RANKING DE LÍDERES E INTERACTIVIDAD
-            col_rank, col_map = st.columns([1, 1])
+            df['Fecha_Solo'] = df['Fecha Registro'].dt.date
             
+            m_hoy = len(df[df['Fecha_Solo'] == hoy.date()])
+            m_8d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=8))])
+            m_15d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=15))])
+            m_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
+
+            k1, k2, k3, k4 = st.columns(4)
+            for col, title, val in zip([k1, k2, k3, k4], 
+                                     ["Hoy", "Últimos 8 Días", "Últimos 15 Días", "Últimos 30 Días"],
+                                     [m_hoy, m_8d, m_15d, m_30d]):
+                col.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-title">{title}</div>
+                        <div class="metric-value">{val:,}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # --- 2. RANKING Y MAPA ---
+            col_rank, col_mapa = st.columns([1, 1.2])
+
             with col_rank:
                 st.subheader("🏆 Ranking de Líderes")
-                lideres_count = df['Registrado Por'].value_counts().reset_index()
-                lideres_count.columns = ['Líder', 'Registros']
+                rank_df = df['Registrado Por'].value_counts().reset_index()
+                rank_df.columns = ['Líder', 'Registros']
                 
-                # Líderes activos
-                lideres_activos = df['Registrado Por'].unique()
-                st.info(f"Líderes con actividad: {len(lideres_activos)}")
+                # Gráfico de barras moderno
+                fig_rank = px.bar(rank_df.head(10), x='Registros', y='Líder', orientation='h',
+                                 color='Registros', color_continuous_scale='RdPu',
+                                 text_auto=True)
+                fig_rank.update_layout(showlegend=False, plot_bgcolor='rgba(0,0,0,0)', 
+                                      paper_bgcolor='rgba(0,0,0,0)', height=400,
+                                      yaxis={'categoryorder':'total ascending'})
+                st.plotly_chart(fig_rank, use_container_width=True, config={'displayModeBar': False})
 
-                # Selección de líder para ver detalles
-                seleccionado = st.selectbox("Seleccione un líder para ver sus registros:", 
-                                            ["Todos"] + list(lideres_count['Líder']))
-                
-                if seleccionado == "Todos":
-                    st.dataframe(lideres_count, use_container_width=True, hide_index=True)
-                else:
-                    detalles_lider = df[df['Registrado Por'] == seleccionado][['Fecha Registro', 'Nombre', 'Cédula', 'Ciudad']]
-                    st.write(f"Registros de **{seleccionado.capitalize()}**:")
-                    st.dataframe(detalles_lider, use_container_width=True, hide_index=True)
+                # Selector Interactivo
+                st.markdown("---")
+                lider_sel = st.selectbox("🎯 Filtrar por Líder:", ["Ver Todos"] + list(rank_df['Líder']))
+                if lider_sel != "Ver Todos":
+                    subset = df[df['Registrado Por'] == lider_sel][['Fecha Registro', 'Nombre', 'Ciudad']]
+                    st.write(f"Detalle de **{lider_sel.upper()}**")
+                    st.dataframe(subset, use_container_width=True, hide_index=True)
 
-            with col_map:
-                # 3. MAPA DE CALOR VALLE DEL CAUCA (Municipio)
-                st.subheader("📍 Mapa de Calor - Valle del Cauca")
+            with col_mapa:
+                st.subheader("🗺️ Cobertura Valle del Cauca")
+                muni_df = df['Ciudad'].str.upper().value_counts().reset_index()
+                muni_df.columns = ['Municipio', 'Cantidad']
                 
-                # Agrupar por municipio
-                municipios_df = df['Ciudad'].str.strip().str.upper().value_counts().reset_index()
-                municipios_df.columns = ['Municipio', 'Cantidad']
-                
-                # Nota: Para un mapa "dibujado" real sin Google Maps usamos px.choropleth
-                # Se requiere un archivo GeoJSON de municipios de Colombia. 
-                # Usaremos uno simplificado de una URL pública para el Valle.
+                # Mapa Coroplético "Dibujo" (GeoJSON)
                 try:
                     geojson_url = "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json"
-                    
-                    fig_mapa = px.choropleth(
-                        municipios_df,
-                        geojson=geojson_url,
-                        locations='Municipio',
-                        featureidkey="properties.name", # Depende del GeoJSON
-                        color='Cantidad',
+                    fig_valle = px.choropleth(
+                        muni_df, geojson=geojson_url, locations='Municipio', 
+                        featureidkey="properties.name", color='Cantidad',
                         color_continuous_scale="RdPu",
-                        scope="south america",
                         labels={'Cantidad':'Registros'}
                     )
-                    fig_mapa.update_geos(fitbounds="locations", visible=False)
-                    fig_mapa.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=400)
-                    st.plotly_chart(fig_mapa, use_container_width=True)
+                    fig_valle.update_geos(fitbounds="locations", visible=False)
+                    fig_valle.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=500, paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig_valle, use_container_width=True)
                 except:
-                    # Fallback si el GeoJSON falla: Gráfico de burbujas/barras representativo
-                    st.write("Cargando mapa... (Visualización Alternativa)")
-                    st.plotly_chart(px.bar(municipios_df, x='Municipio', y='Cantidad', color='Cantidad', color_continuous_scale="RdPu"), use_container_width=True)
+                    st.warning("No se pudo cargar el mapa. Mostrando resumen:")
+                    st.table(muni_df)
 
-            # 4. LISTADO DE LÍDERES ACTIVOS
+            # --- 3. LÍDERES ACTIVOS ---
             st.markdown("---")
-            st.subheader("👥 Líderes que tuvieron actividad")
-            cols_lideres = st.columns(4)
-            for i, l in enumerate(sorted(lideres_activos)):
-                with cols_lideres[i % 4]:
-                    st.markdown(f'<div class="leader-card"><b>{l.upper()}</b></div>', unsafe_allow_html=True)
+            st.subheader("👥 Líderes con Actividad Reciente")
+            activos = sorted(df['Registrado Por'].unique())
+            
+            # Mostrar como etiquetas
+            html_lideres = ""
+            for l in activos:
+                html_lideres += f'<span class="leader-tag">{l.upper()}</span>'
+            st.markdown(f'<div>{html_lideres}</div>', unsafe_allow_html=True)
+            
+            # Tendencia Diaria (Área)
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.subheader("📈 Tendencia de Ingresos")
+            trend = df.groupby('Fecha_Solo').size().reset_index(name='Registros')
+            fig_trend = px.area(trend, x='Fecha_Solo', y='Registros', 
+                               color_discrete_sequence=['#E91E63'])
+            fig_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)',
+                                   xaxis_title=None, yaxis_title="Nuevos Registros")
+            st.plotly_chart(fig_trend, use_container_width=True)
 
         else:
-            st.warning("No hay datos para mostrar estadísticas.")
+            st.info("No hay datos suficientes para generar estadísticas.")
 
-    # --- MÓDULO DE BÚSQUEDA ---
-    elif opcion == "🔍 Búsqueda" and es_admin:
-        st.title("🔍 Búsqueda de Ciudadanos")
+    elif opcion == "🔍 Búsqueda":
+        st.title("🔍 Explorador de Datos")
         df = get_all_data()
         if not df.empty:
-            busq = st.text_input("Nombre o Cédula").upper()
-            if busq:
-                res = df[df.astype(str).apply(lambda x: busq in x.values, axis=1)]
+            q = st.text_input("Buscar por Nombre, Cédula o Líder").upper()
+            if q:
+                res = df[df.astype(str).apply(lambda x: q in x.values, axis=1)]
                 st.dataframe(res, use_container_width=True)
             else:
-                st.dataframe(df.tail(20), use_container_width=True)
+                st.dataframe(df.tail(50), use_container_width=True)
