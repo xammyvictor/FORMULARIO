@@ -20,23 +20,18 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- SISTEMA DE DISEÑO PULSE (CSS PERSONALIZADO) ---
+# --- SISTEMA DE DISEÑO PULSE ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-    
     :root {
         --pulse-pink: #E91E63;
         --pulse-dark: #0F172A;
         --pulse-slate: #64748B;
         --pulse-bg: #F8FAFC;
-        --pulse-card-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
     }
-
     * { font-family: 'Plus Jakarta Sans', sans-serif; }
-    
     .stApp { background-color: var(--pulse-bg); }
-
     .pulse-hero {
         background: var(--pulse-dark);
         color: white;
@@ -44,60 +39,20 @@ st.markdown("""
         border-radius: 32px;
         margin-bottom: 35px;
         box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-        border: 1px solid rgba(255,255,255,0.05);
     }
-    .hero-label { font-size: 0.8rem; font-weight: 700; opacity: 0.6; letter-spacing: 0.1em; text-transform: uppercase; }
+    .hero-label { font-size: 0.8rem; font-weight: 700; opacity: 0.6; text-transform: uppercase; }
     .hero-value { font-size: 4rem; font-weight: 800; line-height: 1; margin: 10px 0; color: white !important; }
     .hero-perc { font-size: 2.5rem; font-weight: 800; color: var(--pulse-pink); }
-    
-    .pulse-progress-track {
-        background: rgba(255, 255, 255, 0.1);
-        height: 16px;
-        border-radius: 20px;
-        width: 100%;
-        margin-top: 25px;
-        overflow: hidden;
-    }
-    .pulse-progress-fill {
-        background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%);
-        height: 100%;
-        border-radius: 20px;
-        transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .pulse-kpi-card {
-        background: white;
-        padding: 24px;
-        border-radius: 24px;
-        border: 1px solid #F1F5F9;
-        box-shadow: var(--pulse-card-shadow);
-    }
+    .pulse-progress-track { background: rgba(255, 255, 255, 0.1); height: 16px; border-radius: 20px; width: 100%; margin-top: 25px; overflow: hidden; }
+    .pulse-progress-fill { background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%); height: 100%; border-radius: 20px; }
+    .pulse-kpi-card { background: white; padding: 24px; border-radius: 24px; border: 1px solid #F1F5F9; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04); }
     .kpi-label { color: var(--pulse-slate); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
     .kpi-val { color: var(--pulse-dark); font-size: 2.4rem; font-weight: 800; line-height: 1; }
-
-    .rank-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 16px;
-        background: white;
-        border-radius: 18px;
-        margin-bottom: 10px;
-        border: 1px solid #F1F5F9;
-    }
+    .rank-item { display: flex; justify-content: space-between; align-items: center; padding: 16px; background: white; border-radius: 18px; margin-bottom: 10px; border: 1px solid #F1F5F9; }
     .rank-num { width: 32px; height: 32px; background: #FCE4EC; color: var(--pulse-pink); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.8rem; margin-right: 12px; }
     .rank-name { font-weight: 700; color: #1E293B; font-size: 0.95rem; }
     .rank-badge { background: #F8FAFC; color: #64748B; padding: 6px 14px; border-radius: 12px; font-weight: 700; font-size: 0.8rem; border: 1px solid #E2E8F0; }
-
-    .hotspot-pill {
-        padding: 4px 12px;
-        background: #FEF2F2;
-        color: #B91C1C;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 700;
-        border: 1px solid #FEE2E2;
-    }
+    .hotspot-pill { padding: 4px 12px; background: #FEF2F2; color: #B91C1C; border-radius: 20px; font-size: 0.75rem; font-weight: 700; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -141,7 +96,7 @@ def save_data(data_dict):
 def check_auth():
     if "logged_in" not in st.session_state: st.session_state.logged_in = False
     if not st.session_state.logged_in:
-        st.markdown("<div style='text-align:center; padding-top: 80px;'><h1>Pulse Analytics</h1><p>Gestión Maria Irma</p></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; padding-top: 80px;'><h1>Pulse Analytics</h1><p>Gestión Territorial</p></div>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 1.4, 1])
         with col2:
             u = st.text_input("Usuario")
@@ -200,7 +155,6 @@ if check_auth():
         if not df.empty:
             st.title("Pulse Analytics | Valle del Cauca")
             
-            # --- 1. HERO META ---
             total = len(df)
             perc = min((total / META_REGISTROS) * 100, 100)
             st.markdown(f"""
@@ -219,24 +173,24 @@ if check_auth():
                 </div>
             """, unsafe_allow_html=True)
 
-            # --- 2. KPIs ---
+            # KPIs
             hoy = datetime.now().date()
             df['F_S'] = df['Fecha Registro'].dt.date
             v_hoy = len(df[df['F_S'] == hoy])
             v_8d = len(df[df['Fecha Registro'] > (datetime.now() - timedelta(days=8))])
 
             k1, k2, k3, k4 = st.columns(4)
-            for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("Últimos 8 días", v_8d), ("Total", total), ("Municipios", df['Ciudad'].nunique())]):
+            for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("Total", total), ("Municipios", df['Ciudad'].nunique())]):
                 col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- 3. MAPA ---
+            # --- MAPA (CORREGIDO) ---
             st.subheader("📍 Concentración Territorial")
             
-            # Limpiamos solo espacios y aseguramos que el tipo de dato sea String
             m_df = df.copy()
-            m_df['Municipio_Map'] = m_df['Ciudad'].astype(str).str.strip()
+            # Aseguramos limpieza y mayúsculas para coincidir con "name":"BUGA"
+            m_df['Municipio_Map'] = m_df['Ciudad'].astype(str).str.upper().str.strip()
             map_data = m_df['Municipio_Map'].value_counts().reset_index()
             map_data.columns = ['Municipio', 'Registros']
             
@@ -245,16 +199,16 @@ if check_auth():
             with c_map_view:
                 try:
                     geojson_url = "https://raw.githubusercontent.com/finiterank/mapa-colombia-js/master/colombia-municipios.json"
-                    response = requests.get(geojson_url)
+                    response = requests.get(geojson_url, timeout=10)
                     geojson_data = response.json()
                     
                     fig = px.choropleth(
                         map_data, 
                         geojson=geojson_data, 
                         locations='Municipio',
-                        featureidkey="properties.name", 
+                        featureidkey="properties.name", # Coincide con tu observación
                         color='Registros',
-                        color_continuous_scale="YlOrRd",
+                        color_continuous_scale="Reds",
                         template="plotly_white"
                     )
 
@@ -266,27 +220,25 @@ if check_auth():
                     fig.update_layout(
                         margin={"r":0,"t":0,"l":0,"b":0}, 
                         height=550,
-                        coloraxis_colorbar=dict(title="Registros", thickness=15)
+                        coloraxis_colorbar=dict(title="Cant.", thickness=15)
                     )
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 except Exception as e:
-                    st.info("No se pudo cargar el mapa. Verifique la conexión o el formato de los datos.")
+                    st.info("Cargando mapa base o error en datos...")
 
             with c_map_stats:
-                st.markdown("<div style='padding-top: 20px;'></div>", unsafe_allow_html=True)
-                st.write("**🔥 Cobertura Actual**")
+                st.write("**🔥 Cobertura por Municipio**")
                 for _, row in map_data.head(10).iterrows():
                     st.markdown(f"""
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 12px; background: white; border-radius: 12px; border: 1px solid #F1F5F9;">
-                            <span style="font-weight: 600; color: #1E293B; font-size: 0.85rem;">{row['Municipio']}</span>
+                        <div class="rank-item">
+                            <span class="rank-name">{row['Municipio']}</span>
                             <span class="hotspot-pill">{row['Registros']} regs</span>
                         </div>
                     """, unsafe_allow_html=True)
 
-            # --- 4. RANKING ---
+            # --- RANKING ---
             st.markdown("---")
             c_rank, c_trend = st.columns([1, 1.5])
-            
             with c_rank:
                 st.subheader("🏆 Leaderboard")
                 ranking = df['Registrado Por'].value_counts().reset_index()
@@ -294,11 +246,11 @@ if check_auth():
                 for i, row in ranking.head(6).iterrows():
                     st.markdown(f"""
                         <div class="rank-item">
-                            <div class="rank-info">
+                            <div style="display:flex; align-items:center;">
                                 <div class="rank-num">{i+1}</div>
                                 <span class="rank-name">{str(row['Líder']).upper()}</span>
                             </div>
-                            <span class="rank-badge">{row['Total']} regs</span>
+                            <span class="rank-badge">{row['Total']}</span>
                         </div>
                     """, unsafe_allow_html=True)
 
