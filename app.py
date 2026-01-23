@@ -235,27 +235,25 @@ if check_auth():
 
             with c_map:
                 geojson_url = (
-    "https://raw.githubusercontent.com/"
-    "caticoa3/colombia_mapa/master/"
-    "co_2018_MGN_MPIO_POLITICO.geojson"
-)
-geojson_data = requests.get(geojson_url).json()
+                    "https://raw.githubusercontent.com/"
+                    "caticoa3/colombia_mapa/master/"
+                    "co_2018_MGN_MPIO_POLITICO.geojson"
+                )
+                geojson_data = requests.get(geojson_url).json()
 
-fig = px.choropleth(
-    map_data,
-    geojson=geojson_data,
-    locations="Municipio",
-    featureidkey="properties.NOM_MPIO",
-    color="Registros",
-    color_continuous_scale="YlOrRd",
-    template="plotly_white"
-)
+                fig = px.choropleth(
+                    map_data,
+                    geojson=geojson_data,
+                    locations="Municipio",
+                    featureidkey="properties.NOM_MPIO",
+                    color="Registros",
+                    color_continuous_scale="YlOrRd",
+                    template="plotly_white"
+                )
 
-fig.update_geos(fitbounds="locations", visible=False)
-fig.update_layout(height=600)
-
-st.plotly_chart(fig, use_container_width=True)
-
+                fig.update_geos(fitbounds="locations", visible=False)
+                fig.update_layout(height=600)
+                st.plotly_chart(fig, use_container_width=True)
 
     # --------------------------------------------------
     # BÚSQUEDA
