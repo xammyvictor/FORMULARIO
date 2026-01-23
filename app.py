@@ -40,7 +40,7 @@ def normalizar_para_mapa(muni):
         "BUGA": "GUADALAJARA DE BUGA",
         "SANTIAGO DE CALI": "SANTIAGO DE CALI",
         "CALI": "CALI",
-        "JAMUNDI": "JAMUNDI",
+        "JAMUNDI": "JAMUNDÍ",
         "TULUA": "TULUA",
         "GUACARI": "GUACARI",
         "DARIEN": "CALIMA",
