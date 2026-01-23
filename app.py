@@ -26,15 +26,15 @@ st.set_page_config(
 def normalizar(texto):
     if not texto: return ""
     texto = str(texto).upper().strip()
-    # Eliminar acentos
+    # Eliminar acentos y diéresis
     texto = unicodedata.normalize("NFD", texto)
     texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
-    # Limpiar espacios múltiples
+    # Limpiar espacios múltiples e internos
     return " ".join(texto.split())
 
 def normalizar_para_mapa(muni):
     m = normalizar(muni)
-    # Diccionario ajustado a la nomenclatura oficial del GeoJSON de santiblanko
+    # Diccionario de equivalencias para coincidir con el GeoJSON oficial
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
@@ -48,7 +48,9 @@ def normalizar_para_mapa(muni):
         "ANDALUCIA": "ANDALUCIA",
         "EL CERRITO": "EL CERRITO",
         "CARTAGO": "CARTAGO",
-        "PALMIRA": "PALMIRA"
+        "PALMIRA": "PALMIRA",
+        "YUMBO": "YUMBO",
+        "DAGUA": "DAGUA"
     }
     return mapping.get(m, m)
 
@@ -90,7 +92,6 @@ def apply_custom_styles():
             background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%);
             height: 100%;
             border-radius: 20px;
-            transition: width 1s ease-in-out;
         }
 
         .pulse-kpi-card {
@@ -173,20 +174,20 @@ def get_valle_geojson():
     """Descarga y filtra GeoJSON del Valle del Cauca."""
     try:
         url = "https://raw.githubusercontent.com/santiblanko/colombia.geojson/master/mpio.json"
-        response = requests.get(url, timeout=15)
+        response = requests.get(url, timeout=20)
         if response.status_code != 200: return None
         data = response.json()
         
         valle_features = []
         for feature in data["features"]:
             props = feature["properties"]
-            # Valle del Cauca es Código DANE 76
-            dpto_id = str(props.get("DPTO_CCDGO", props.get("DPTO", "")))
-            dpto_nom = normalizar(str(props.get("DPTO_CNMBR", "")))
+            # Identificar Valle por nombre o código DANE 76
+            dpto = normalizar(str(props.get("DPTO_CNMBR", "")))
+            cod_dpto = str(props.get("DPTO_CCDGO", ""))
             
-            if dpto_id == "76" or dpto_nom == "VALLE DEL CAUCA":
+            if dpto == "VALLE DEL CAUCA" or cod_dpto == "76":
+                # Propiedad de cruce normalizada
                 m_name = props.get("MPIO_CNMBR") or props.get("NOMBRE_MPI") or ""
-                # Creamos una propiedad MPIO_MATCH normalizada para el cruce
                 props["MPIO_MATCH"] = normalizar(m_name)
                 valle_features.append(feature)
         
@@ -239,7 +240,7 @@ def view_registro():
             ocu = st.text_input("Ocupación")
             dir = st.text_input("Dirección")
             bar = st.text_input("Barrio")
-        ciu = st.text_input("Municipio", value="BUGA")
+        ciu = st.text_input("Municipio (Ej: BUGA)", value="BUGA")
         pue = st.text_input("Puesto (Opcional)")
         
         if st.form_submit_button("GUARDAR REGISTRO"):
@@ -254,8 +255,8 @@ def view_registro():
                     st.session_state.f_reset += 1
                     time.sleep(1)
                     st.rerun()
-                else: st.error("Error al conectar con Google Sheets.")
-            else: st.warning("Complete Nombre, Cédula y Teléfono.")
+                else: st.error("Error al conectar con la base de datos.")
+            else: st.warning("Complete los campos obligatorios.")
 
 def view_estadisticas():
     df = get_data()
@@ -297,7 +298,7 @@ def view_estadisticas():
 
     # --- MAPA REFORZADO ---
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📍 Concentración Territorial (Valle del Cauca)")
+    st.subheader("📍 Concentración por Municipio")
     
     # Preparación de datos de cruce
     m_df = df.copy()
@@ -321,23 +322,23 @@ def view_estadisticas():
                 labels={'Registros': 'Total'}
             )
             fig.update_geos(
-                fitbounds="locations", 
-                visible=True, # Mostrar contornos base
-                showcountries=False,
+                center=dict(lat=3.85, lon=-76.5), # Centrar en Valle del Cauca
+                projection_scale=38, # Zoom forzado
+                visible=True,
                 showcoastlines=False,
                 bgcolor="white"
             )
             fig.update_layout(
                 margin={"r":0,"t":0,"l":0,"b":0}, 
                 height=550,
-                coloraxis_colorbar=dict(title="Densidad", thickness=15)
+                coloraxis_colorbar=dict(title="Registros", thickness=15)
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.error("Error al cargar la capa geográfica del departamento.")
+            st.error("Error al cargar la capa geográfica.")
 
     with c_map_stats:
-        st.write("**🔥 Puntos Calientes**")
+        st.write("**🔥 Municipios Líderes**")
         for _, row in map_data.head(6).iterrows():
             st.markdown(f"""
                 <div class="rank-item" style="padding:12px; margin-bottom:8px;">
@@ -347,8 +348,8 @@ def view_estadisticas():
             """, unsafe_allow_html=True)
         
         st.markdown("---")
-        st.metric("Municipios Activos", f"{len(map_data)} / {MUNICIPIOS_VALLE}")
-        st.metric("Promedio Regional", f"{int(map_data['Registros'].mean()) if not map_data.empty else 0}")
+        st.metric("Municipios con Datos", f"{len(map_data)} / {MUNICIPIOS_VALLE}")
+        st.metric("Promedio x Municipio", f"{int(map_data['Registros'].mean()) if not map_data.empty else 0}")
 
     # --- LEADERBOARD ---
     st.markdown("---")
@@ -380,7 +381,7 @@ def view_busqueda():
     st.title("🔍 Explorador de Registros")
     df = get_data()
     if not df.empty:
-        q = st.text_input("Buscar por nombre, cédula o municipio...").upper()
+        q = st.text_input("Buscar...").upper()
         if q:
             res = df[df.astype(str).apply(lambda x: q in x.str.upper().values, axis=1)]
             st.dataframe(res, use_container_width=True, hide_index=True)
