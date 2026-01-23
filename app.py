@@ -39,6 +39,7 @@ st.markdown("""
     
     .stApp { background-color: var(--pulse-bg); }
 
+    /* Hero Meta Section */
     .pulse-hero {
         background: var(--pulse-dark);
         color: white;
@@ -67,6 +68,7 @@ st.markdown("""
         transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
+    /* KPI Cards */
     .pulse-kpi-card {
         background: white;
         padding: 24px;
@@ -76,7 +78,8 @@ st.markdown("""
     }
     .kpi-label { color: var(--pulse-slate); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
     .kpi-val { color: var(--pulse-dark); font-size: 2.4rem; font-weight: 800; line-height: 1; }
-    
+
+    /* Ranking Items */
     .rank-item {
         display: flex;
         justify-content: space-between;
@@ -91,6 +94,7 @@ st.markdown("""
     .rank-name { font-weight: 700; color: #1E293B; font-size: 0.95rem; }
     .rank-badge { background: #F8FAFC; color: #64748B; padding: 6px 14px; border-radius: 12px; font-weight: 700; font-size: 0.8rem; border: 1px solid #E2E8F0; }
 
+    /* Sidebar and UI */
     .stSidebar { background-color: white !important; border-right: 1px solid #E2E8F0; }
     .stButton>button { border-radius: 14px !important; background: var(--pulse-pink) !important; font-weight: 700 !important; color: white !important; border: none !important; width: 100%; height: 3.2rem; }
     
@@ -153,10 +157,36 @@ def normalizar_para_mapa(muni):
         "GUACARI": "GUACARÍ",
         "DARIEN": "CALIMA",
         "CALIMA": "CALIMA",
+        "PALMIRA": "PALMIRA",
+        "CARTAGO": "CARTAGO",
+        "YUMBO": "YUMBO",
         "ANDALUCIA": "ANDALUCÍA",
+        "BUENAVENTURA": "BUENAVENTURA",
+        "BUGALAGRANDE": "BUGALAGRANDE",
+        "CAICEDONIA": "CAICEDONIA",
+        "CANDELARIA": "CANDELARIA",
+        "DAGUA": "DAGUA",
+        "EL CERRITO": "EL CERRITO",
+        "EL DOVIO": "EL DOVIO",
+        "FLORIDA": "FLORIDA",
+        "GINEBRA": "GINEBRA",
+        "LA CUMBRE": "LA CUMBRE",
         "LA UNION": "LA UNIÓN",
+        "LA VICTORIA": "LA VICTORIA",
+        "OBANDO": "OBANDO",
+        "PRADERA": "PRADERA",
+        "RESTREPO": "RESTREPO",
         "RIOFRIO": "RIOFRIO",
-        "SAN PEDRO": "SAN PEDRO"
+        "ROLDANILLO": "ROLDANILLO",
+        "SAN PEDRO": "SAN PEDRO",
+        "SEVILLA": "SEVILLA",
+        "TORO": "TORO",
+        "TRUJILLO": "TRUJILLO",
+        "ULLOA": "ULLOA",
+        "VERSALLES": "VERSALLES",
+        "VIJES": "VIJES",
+        "YOTOCO": "YOTOCO",
+        "ZARZAL": "ZARZAL"
     }
     return mapping.get(m, m)
 
@@ -231,6 +261,7 @@ if check_auth():
         if not df.empty:
             st.title("Pulse Analytics | Valle del Cauca")
             
+            # --- HERO META ---
             total = len(df)
             perc = min((total / META_REGISTROS) * 100, 100)
             st.markdown(f"""
@@ -249,6 +280,7 @@ if check_auth():
                 </div>
             """, unsafe_allow_html=True)
 
+            # --- KPIs ---
             hoy = datetime.now()
             df['F_S'] = df['Fecha Registro'].dt.date
             v_hoy = len(df[df['F_S'] == hoy.date()])
@@ -261,7 +293,7 @@ if check_auth():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- MAPA RECONSTRUIDO PARA EVITAR ERRORES ---
+            # --- MAPA RECONSTRUIDO Y CORREGIDO ---
             st.subheader("📍 Mapa de Calor y Concentración Territorial")
             
             m_df = df.copy()
@@ -275,15 +307,16 @@ if check_auth():
                 map_mode = st.radio("Modo de Visualización:", ["Coropleta Territorial", "Hotspots"], horizontal=True)
                 
                 try:
-                    # CARGA DE URL SEGURA
+                    # CARGA DE URL NACIONAL (Verificada)
                     url_geojson = "https://raw.githubusercontent.com/marcovega/colombia-json/master/colombia.min.json"
-                    response = requests.get(url_geojson)
+                    response = requests.get(url_geojson, timeout=10)
                     data_full = response.json()
                     
-                    # FILTRADO DE FEATURES (Arregla el error de 'list indices must be integers')
+                    # FILTRADO DE FEATURES: Evita el error 'list indices must be integers'
+                    # Se recorre la lista de 'features' y se filtra por propiedad de departamento
                     valle_features = [
                         f for f in data_full['features'] 
-                        if f['properties'].get('DPTO_CNMBRE') == 'VALLE DEL CAUCA'
+                        if f.get('properties', {}).get('DPTO_CNMBRE') == 'VALLE DEL CAUCA'
                     ]
                     
                     valle_geojson = {
@@ -299,7 +332,8 @@ if check_auth():
                             featureidkey="properties.MPIO_CNMBRE", 
                             color='Registros',
                             color_continuous_scale="YlOrRd",
-                            template="plotly_white"
+                            template="plotly_white",
+                            labels={'Registros': 'Registros'}
                         )
                     else:
                         fig = px.choropleth(
@@ -310,14 +344,14 @@ if check_auth():
                         fig.update_traces(marker_line_width=0.5, marker_line_color="white")
 
                     fig.update_geos(fitbounds="locations", visible=False)
-                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=500)
+                    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550)
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 except Exception as e:
-                    st.error(f"Error cargando mapa: {e}")
+                    st.error(f"Error procesando el mapa: {e}")
 
             with c_map_stats:
                 st.markdown("<div style='padding-top: 50px;'></div>", unsafe_allow_html=True)
-                st.write("**🔥 Hotspots**")
+                st.write("**🔥 Puntos Críticos**")
                 for _, row in map_data.head(5).iterrows():
                     st.markdown(f"""
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 10px; background: white; border-radius: 12px; border: 1px solid #F1F5F9;">
@@ -326,9 +360,9 @@ if check_auth():
                         </div>
                     """, unsafe_allow_html=True)
                 
-                st.metric("Municipios Cubiertos", f"{len(map_data)} / 42")
+                st.metric("Cobertura Regional", f"{len(map_data)} / 42 Municipios")
 
-            # --- SECCIONES FINALES ---
+            # --- RANKING Y TENDENCIA ---
             st.markdown("---")
             c_rank, c_trend = st.columns([1, 1.5])
             
@@ -345,17 +379,17 @@ if check_auth():
                     """, unsafe_allow_html=True)
 
             with c_trend:
-                st.subheader("📈 Tendencia")
+                st.subheader("📈 Actividad Histórica")
                 trend = df.groupby('F_S').size().reset_index(name='Ingresos')
                 fig_trend = px.area(trend, x='F_S', y='Ingresos', color_discrete_sequence=['#E91E63'])
-                fig_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350)
+                fig_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=350, xaxis_title=None, yaxis_title=None)
                 st.plotly_chart(fig_trend, use_container_width=True)
 
     elif opcion == "🔍 Búsqueda":
-        st.title("🔍 Explorador")
+        st.title("🔍 Explorador de Registros")
         df = get_data()
         if not df.empty:
-            q = st.text_input("Buscar...").upper()
+            q = st.text_input("Buscar por nombre, cédula o municipio...").upper()
             if q:
                 res = df[df.astype(str).apply(lambda x: q in x.values, axis=1)]
                 st.dataframe(res, use_container_width=True)
