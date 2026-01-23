@@ -321,6 +321,19 @@ if check_auth():
                     
                     if map_mode == "Coropleta Territorial":
                         # Mapa de Calor por regiones (Dibujo limpio)
+                        st.write("Columnas:", map_data.columns)
+                        st.write("Filas:", len(map_data))
+                        st.write(map_data.head())
+                        st.write("Municipios en GeoJSON:")
+                        st.write(
+                            sorted(
+                                {f["properties"]["MPIO_CNMBR"] for f in geojson_data["features"]}
+                            )
+                        )
+
+
+
+                        
                         fig = px.choropleth(
                             map_data, 
                             geojson=geojson_data, 
