@@ -10,6 +10,14 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import requests
 import numpy as np
+import unicodedata
+
+def normalizar(texto):
+    texto = str(texto).upper().strip()
+    texto = unicodedata.normalize("NFD", texto)
+    texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
+    return texto
+
 
 # --- CONFIGURACIÓN GENERAL ---
 BASE_URL = "https://formulario-skccey4ttaounxkvpa39sv.streamlit.app/"
@@ -148,7 +156,11 @@ def save_data(data_dict):
         return True
     except: return False
 
+
+
 # --- NORMALIZACIÓN DE MUNICIPIOS ---
+
+
 def normalizar_para_mapa(muni):
     m = str(muni).upper().strip()
     mapping = {
