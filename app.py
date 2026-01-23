@@ -220,51 +220,53 @@ if check_auth():
     # --------------------------------------------------
     # ESTADÍSTICAS
     # --------------------------------------------------
-with c_map_view:
-    map_mode = st.radio(
-        "Modo de Visualización:",
-        ["Coropleta Territorial", "Hotspots de Concentración"],
-        horizontal=True
-    )
+elif opcion == "📊 Estadísticas":
 
-    try:
-        geojson_url = (
-            "https://raw.githubusercontent.com/"
-            "caticoa3/colombia_mapa/master/"
-            "co_2018_MGN_MPIO_POLITICO.geojson"
-        )
-        geojson_data = requests.get(geojson_url).json()
+    st.title("Pulse Analytics | Valle del Cauca")
 
-        fig = px.choropleth(
-            map_data,
-            geojson=geojson_data,
-            locations="Municipio",
-            featureidkey="properties.NOM_MPIO",
-            color="Registros",
-            color_continuous_scale="YlOrRd",
-            template="plotly_white",
-            labels={"Registros": "Total Registros"}
-        )
+    df = get_data()
+    if df.empty:
+        st.info("No hay datos para mostrar.")
+    else:
+        m_df = df.copy()
+        m_df["Municipio_Map"] = m_df["Ciudad"].apply(normalizar_para_mapa)
+        map_data = m_df["Municipio_Map"].value_counts().reset_index()
+        map_data.columns = ["Municipio", "Registros"]
 
-        fig.update_geos(fitbounds="locations", visible=False)
-        fig.update_layout(
-            margin={"r": 0, "t": 0, "l": 0, "b": 0},
-            height=600,
-            coloraxis_colorbar=dict(
-                title="Densidad",
-                thickness=15,
-                len=300
+        c_map_view, c_map_stats = st.columns([2, 1])
+
+        with c_map_view:
+            map_mode = st.radio(
+                "Modo de Visualización:",
+                ["Coropleta Territorial", "Hotspots de Concentración"],
+                horizontal=True
             )
-        )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True,
-            config={"displayModeBar": False}
-        )
+            try:
+                geojson_url = (
+                    "https://raw.githubusercontent.com/"
+                    "caticoa3/colombia_mapa/master/"
+                    "co_2018_MGN_MPIO_POLITICO.geojson"
+                )
+                geojson_data = requests.get(geojson_url).json()
 
-    except Exception as e:
-        st.error(f"Error al cargar el mapa: {e}")
+                fig = px.choropleth(
+                    map_data,
+                    geojson=geojson_data,
+                    locations="Municipio",
+                    featureidkey="properties.NOM_MPIO",
+                    color="Registros",
+                    color_continuous_scale="YlOrRd",
+                    template="plotly_white"
+                )
+
+                fig.update_geos(fitbounds="locations", visible=False)
+                fig.update_layout(height=600)
+                st.plotly_chart(fig, use_container_width=True)
+
+            except Exception as e:
+                st.error(f"Error al cargar el mapa: {e}")
+
 
     # --------------------------------------------------
     # BÚSQUEDA
