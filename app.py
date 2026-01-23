@@ -22,16 +22,19 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. FUNCIONES DE UTILIDAD ---
+# --- 2. FUNCIONES DE UTILIDAD (NORMALIZACIÓN) ---
 def normalizar(texto):
     if not texto: return ""
     texto = str(texto).upper().strip()
+    # Eliminar acentos
     texto = unicodedata.normalize("NFD", texto)
     texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
+    # Limpiar espacios múltiples
     return " ".join(texto.split())
 
 def normalizar_para_mapa(muni):
     m = normalizar(muni)
+    # Diccionario ajustado a la nomenclatura oficial del GeoJSON de santiblanko
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
@@ -42,7 +45,10 @@ def normalizar_para_mapa(muni):
         "CALIMA": "CALIMA",
         "LA UNION": "LA UNION",
         "RIOFRIO": "RIOFRIO",
-        "ANDALUCIA": "ANDALUCIA"
+        "ANDALUCIA": "ANDALUCIA",
+        "EL CERRITO": "EL CERRITO",
+        "CARTAGO": "CARTAGO",
+        "PALMIRA": "PALMIRA"
     }
     return mapping.get(m, m)
 
@@ -162,11 +168,10 @@ def save_data(data_dict):
         return True
     except Exception: return False
 
-@st.cache_data(ttl=86400) # Caché de 24 horas para el GeoJSON
+@st.cache_data(ttl=86400)
 def get_valle_geojson():
-    """Descarga el GeoJSON oficial de municipios de Colombia y filtra el Valle del Cauca"""
+    """Descarga y filtra GeoJSON del Valle del Cauca."""
     try:
-        # Usamos una fuente alternativa si la primera falla o es lenta
         url = "https://raw.githubusercontent.com/santiblanko/colombia.geojson/master/mpio.json"
         response = requests.get(url, timeout=15)
         if response.status_code != 200: return None
@@ -175,20 +180,20 @@ def get_valle_geojson():
         valle_features = []
         for feature in data["features"]:
             props = feature["properties"]
-            # Detectar Valle del Cauca por nombre o código DANE 76
-            nom_dpto = normalizar(str(props.get("DPTO_CNMBR", props.get("NOMBRE_DPT", ""))))
-            cod_dpto = str(props.get("DPTO_CCDGO", props.get("DPTO", "")))
+            # Valle del Cauca es Código DANE 76
+            dpto_id = str(props.get("DPTO_CCDGO", props.get("DPTO", "")))
+            dpto_nom = normalizar(str(props.get("DPTO_CNMBR", "")))
             
-            if nom_dpto == "VALLE DEL CAUCA" or cod_dpto == "76":
-                m_name = props.get("MPIO_CNMBR") or props.get("NOMBRE_MPI") or props.get("MPIO", "")
-                props["MPIO_NORM"] = normalizar(m_name)
+            if dpto_id == "76" or dpto_nom == "VALLE DEL CAUCA":
+                m_name = props.get("MPIO_CNMBR") or props.get("NOMBRE_MPI") or ""
+                # Creamos una propiedad MPIO_MATCH normalizada para el cruce
+                props["MPIO_MATCH"] = normalizar(m_name)
                 valle_features.append(feature)
         
         if not valle_features: return None
         data["features"] = valle_features
         return data
-    except Exception as e:
-        print(f"Error GeoJSON: {e}")
+    except Exception:
         return None
 
 # --- 5. LOGICA DE AUTENTICACIÓN ---
@@ -249,13 +254,13 @@ def view_registro():
                     st.session_state.f_reset += 1
                     time.sleep(1)
                     st.rerun()
-                else: st.error("Error al guardar en Google Sheets.")
+                else: st.error("Error al conectar con Google Sheets.")
             else: st.warning("Complete Nombre, Cédula y Teléfono.")
 
 def view_estadisticas():
     df = get_data()
     if df.empty:
-        st.info("Aún no hay datos para procesar estadísticas.")
+        st.info("No hay datos para mostrar.")
         return
 
     st.title("Pulse Analytics | Valle del Cauca")
@@ -290,11 +295,11 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA ---
+    # --- MAPA REFORZADO ---
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📍 Densidad de Registros por Municipio")
+    st.subheader("📍 Concentración Territorial (Valle del Cauca)")
     
-    # Preparar datos: Cruzamos los registros con los nombres normalizados del mapa
+    # Preparación de datos de cruce
     m_df = df.copy()
     m_df['MPIO_JOIN'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
     map_data = m_df['MPIO_JOIN'].value_counts().reset_index()
@@ -309,7 +314,7 @@ def view_estadisticas():
                 map_data, 
                 geojson=geojson_data, 
                 locations='ID_MPIO',
-                featureidkey="properties.MPIO_NORM", 
+                featureidkey="properties.MPIO_MATCH", 
                 color='Registros',
                 color_continuous_scale="Reds",
                 template="plotly_white",
@@ -317,21 +322,22 @@ def view_estadisticas():
             )
             fig.update_geos(
                 fitbounds="locations", 
-                visible=False,
-                projection_type="mercator"
+                visible=True, # Mostrar contornos base
+                showcountries=False,
+                showcoastlines=False,
+                bgcolor="white"
             )
             fig.update_layout(
                 margin={"r":0,"t":0,"l":0,"b":0}, 
                 height=550,
-                coloraxis_colorbar=dict(title="Escala", thickness=15)
+                coloraxis_colorbar=dict(title="Densidad", thickness=15)
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.error("No se pudo cargar la capa geográfica del departamento.")
-            st.dataframe(map_data, use_container_width=True)
+            st.error("Error al cargar la capa geográfica del departamento.")
 
     with c_map_stats:
-        st.write("**🔥 Ranking Municipal**")
+        st.write("**🔥 Puntos Calientes**")
         for _, row in map_data.head(6).iterrows():
             st.markdown(f"""
                 <div class="rank-item" style="padding:12px; margin-bottom:8px;">
@@ -349,8 +355,7 @@ def view_estadisticas():
     c_rank, c_trend = st.columns([1, 1.5])
     
     with c_rank:
-        st.subheader("🏆 Leaderboard de Líderes")
-        # Columna exacta del sheet: 'Registrado Por'
+        st.subheader("🏆 Leaderboard")
         ranking = df['Registrado Por'].value_counts().reset_index()
         ranking.columns = ['Líder', 'Total']
         for i, row in ranking.head(8).iterrows():
