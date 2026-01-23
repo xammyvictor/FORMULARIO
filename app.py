@@ -26,15 +26,15 @@ st.set_page_config(
 def normalizar(texto):
     if not texto: return ""
     texto = str(texto).upper().strip()
-    # Eliminar acentos y diéresis
+    # Eliminar acentos y diéresis para coincidencia exacta
     texto = unicodedata.normalize("NFD", texto)
     texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
-    # Limpiar espacios múltiples e internos
     return " ".join(texto.split())
 
 def normalizar_para_mapa(muni):
     m = normalizar(muni)
     # Diccionario de equivalencias para coincidir con el GeoJSON oficial
+    # Se asegura que "BUGA" se traduzca al nombre oficial del mapa
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
@@ -92,6 +92,7 @@ def apply_custom_styles():
             background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%);
             height: 100%;
             border-radius: 20px;
+            transition: width 1s ease;
         }
 
         .pulse-kpi-card {
@@ -171,31 +172,34 @@ def save_data(data_dict):
 
 @st.cache_data(ttl=86400)
 def get_valle_geojson():
-    """Descarga y filtra GeoJSON del Valle del Cauca."""
-    try:
-        url = "https://raw.githubusercontent.com/santiblanko/colombia.geojson/master/mpio.json"
-        response = requests.get(url, timeout=20)
-        if response.status_code != 200: return None
-        data = response.json()
-        
-        valle_features = []
-        for feature in data["features"]:
-            props = feature["properties"]
-            # Identificar Valle por nombre o código DANE 76
-            dpto = normalizar(str(props.get("DPTO_CNMBR", "")))
-            cod_dpto = str(props.get("DPTO_CCDGO", ""))
-            
-            if dpto == "VALLE DEL CAUCA" or cod_dpto == "76":
-                # Propiedad de cruce normalizada
-                m_name = props.get("MPIO_CNMBR") or props.get("NOMBRE_MPI") or ""
-                props["MPIO_MATCH"] = normalizar(m_name)
-                valle_features.append(feature)
-        
-        if not valle_features: return None
-        data["features"] = valle_features
-        return data
-    except Exception:
-        return None
+    """Descarga GeoJSON con lógica de redundancia."""
+    urls = [
+        "https://raw.githubusercontent.com/santiblanko/colombia.geojson/master/mpio.json",
+        "https://gist.githubusercontent.com/john-guerra/43c76568237d6f43ad9f/raw/800974fa2e16d4036e7885b51c8906352c803099/colombia.geo.json"
+    ]
+    for url in urls:
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                valle_features = []
+                for feature in data["features"]:
+                    props = feature["properties"]
+                    # Buscar departamento por nombre o por código 76 (Valle del Cauca)
+                    dpto_nom = normalizar(str(props.get("DPTO_CNMBR", props.get("dpto", props.get("NOMBRE_DPT", "")))))
+                    dpto_cod = str(props.get("DPTO_CCDGO", props.get("DPTO", "")))
+                    
+                    if dpto_nom == "VALLE DEL CAUCA" or dpto_cod == "76":
+                        m_name = props.get("MPIO_CNMBR") or props.get("NOMBRE_MPI") or props.get("mpio", "")
+                        props["MPIO_MATCH"] = normalizar(m_name)
+                        valle_features.append(feature)
+                
+                if valle_features:
+                    data["features"] = valle_features
+                    return data
+        except:
+            continue
+    return None
 
 # --- 5. LOGICA DE AUTENTICACIÓN ---
 def check_auth():
@@ -251,17 +255,17 @@ def view_registro():
                     "barrio": bar.upper(), "ciudad": ciu.upper(), "puesto": pue.upper()
                 })
                 if success:
-                    st.success("¡Registro guardado con éxito!")
+                    st.success("¡Registro guardado correctamente!")
                     st.session_state.f_reset += 1
                     time.sleep(1)
                     st.rerun()
-                else: st.error("Error al conectar con la base de datos.")
-            else: st.warning("Complete los campos obligatorios.")
+                else: st.error("Fallo al conectar con el servidor.")
+            else: st.warning("Nombre, Cédula y Teléfono son campos obligatorios.")
 
 def view_estadisticas():
     df = get_data()
     if df.empty:
-        st.info("No hay datos para mostrar.")
+        st.info("No hay datos disponibles.")
         return
 
     st.title("Pulse Analytics | Valle del Cauca")
@@ -296,14 +300,14 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA REFORZADO ---
+    # --- MAPA ---
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📍 Concentración por Municipio")
+    st.subheader("📍 Concentración Territorial")
     
-    # Preparación de datos de cruce
+    # Preparación de datos: "BUGA" -> "GUADALAJARA DE BUGA" -> Normalizado
     m_df = df.copy()
-    m_df['MPIO_JOIN'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
-    map_data = m_df['MPIO_JOIN'].value_counts().reset_index()
+    m_df['ID_MAPA'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
+    map_data = m_df['ID_MAPA'].value_counts().reset_index()
     map_data.columns = ['ID_MPIO', 'Registros']
     
     c_map_view, c_map_stats = st.columns([2, 1])
@@ -322,23 +326,23 @@ def view_estadisticas():
                 labels={'Registros': 'Total'}
             )
             fig.update_geos(
-                center=dict(lat=3.85, lon=-76.5), # Centrar en Valle del Cauca
-                projection_scale=38, # Zoom forzado
-                visible=True,
+                fitbounds="locations", 
+                visible=True, # Ver contornos aunque no haya datos
                 showcoastlines=False,
                 bgcolor="white"
             )
             fig.update_layout(
                 margin={"r":0,"t":0,"l":0,"b":0}, 
                 height=550,
-                coloraxis_colorbar=dict(title="Registros", thickness=15)
+                coloraxis_colorbar=dict(title="Escala", thickness=15)
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.error("Error al cargar la capa geográfica.")
+            st.error("⚠️ Capa geográfica no disponible. Mostrando datos tabulares:")
+            st.dataframe(map_data, use_container_width=True, hide_index=True)
 
     with c_map_stats:
-        st.write("**🔥 Municipios Líderes**")
+        st.write("**🔥 Líderes por Municipio**")
         for _, row in map_data.head(6).iterrows():
             st.markdown(f"""
                 <div class="rank-item" style="padding:12px; margin-bottom:8px;">
@@ -348,15 +352,15 @@ def view_estadisticas():
             """, unsafe_allow_html=True)
         
         st.markdown("---")
-        st.metric("Municipios con Datos", f"{len(map_data)} / {MUNICIPIOS_VALLE}")
-        st.metric("Promedio x Municipio", f"{int(map_data['Registros'].mean()) if not map_data.empty else 0}")
+        st.metric("Cobertura Regional", f"{len(map_data)} / {MUNICIPIOS_VALLE}")
+        st.metric("Media de Gestión", f"{int(map_data['Registros'].mean()) if not map_data.empty else 0}")
 
     # --- LEADERBOARD ---
     st.markdown("---")
     c_rank, c_trend = st.columns([1, 1.5])
     
     with c_rank:
-        st.subheader("🏆 Leaderboard")
+        st.subheader("🏆 Leaderboard de Líderes")
         ranking = df['Registrado Por'].value_counts().reset_index()
         ranking.columns = ['Líder', 'Total']
         for i, row in ranking.head(8).iterrows():
@@ -381,7 +385,7 @@ def view_busqueda():
     st.title("🔍 Explorador de Registros")
     df = get_data()
     if not df.empty:
-        q = st.text_input("Buscar...").upper()
+        q = st.text_input("Buscar por nombre, cédula o municipio...").upper()
         if q:
             res = df[df.astype(str).apply(lambda x: q in x.str.upper().values, axis=1)]
             st.dataframe(res, use_container_width=True, hide_index=True)
