@@ -220,7 +220,7 @@ if check_auth():
     # --------------------------------------------------
     # ESTADÍSTICAS
     # --------------------------------------------------
-    with c_map_view:
+with c_map_view:
     map_mode = st.radio(
         "Modo de Visualización:",
         ["Coropleta Territorial", "Hotspots de Concentración"],
