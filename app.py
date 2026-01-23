@@ -22,7 +22,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- SISTEMA DE DISEÑO PULSE (CSS MEJORADO) ---
+# --- SISTEMA DE DISEÑO PULSE (CSS PREMIUM) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -35,10 +35,9 @@ st.markdown("""
     }
 
     * { font-family: 'Plus Jakarta Sans', sans-serif; }
-    
     .stApp { background-color: var(--pulse-bg); }
 
-    /* Estilo de Tarjetas KPI Estilo Pulse */
+    /* Tarjetas KPI */
     .pulse-card {
         background: white;
         padding: 24px;
@@ -47,11 +46,10 @@ st.markdown("""
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
         margin-bottom: 20px;
     }
-    
     .pulse-label { color: var(--pulse-slate); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
     .pulse-value { color: var(--pulse-dark); font-size: 2.2rem; font-weight: 800; margin: 8px 0; line-height: 1; }
-    
-    /* Barra de Meta */
+
+    /* Hero Meta */
     .hero-section {
         background: var(--pulse-dark);
         color: white;
@@ -60,7 +58,7 @@ st.markdown("""
         margin-bottom: 35px;
         box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
     }
-    .hero-big-num { font-size: 4rem; font-weight: 800; color: white !important; line-height: 1; }
+    .hero-big-num { font-size: 4rem; font-weight: 800; color: white !important; }
     .hero-perc { font-size: 2.5rem; font-weight: 800; color: var(--pulse-pink); }
     
     .progress-track {
@@ -75,14 +73,14 @@ st.markdown("""
         background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%);
         height: 100%;
         border-radius: 20px;
-        transition: width 1.5s ease-in-out;
+        transition: width 1.5s ease;
     }
 
-    /* Formulario */
+    /* Botones y Formulario */
     .stButton>button { border-radius: 14px !important; background: var(--pulse-pink) !important; font-weight: 700 !important; color: white !important; border: none !important; width: 100%; height: 3.5rem; }
     .stTextInput>div>div>input { border-radius: 12px !important; }
     
-    /* Hotspots */
+    /* Hotspot Tag */
     .hotspot-tag {
         padding: 4px 12px;
         background: #FCE4EC;
@@ -147,7 +145,11 @@ def normalizar_muni(muni):
         "YUMBO": "YUMBO",
         "ROLDANILLO": "ROLDANILLO",
         "ZARZAL": "ZARZAL",
-        "ANDALUCIA": "ANDALUCÍA"
+        "ANDALUCIA": "ANDALUCÍA",
+        "FLORIDA": "FLORIDA",
+        "PRADERA": "PRADERA",
+        "EL CERRITO": "EL CERRITO",
+        "GINEBRA": "GINEBRA"
     }
     return mapping.get(m, m)
 
@@ -158,13 +160,11 @@ def load_valle_geojson():
     try:
         r = requests.get(url, timeout=10)
         return r.json()
-    except:
-        return None
+    except: return None
 
 # --- AUTH ---
 def check_auth():
     if "logged_in" not in st.session_state: st.session_state.logged_in = False
-    
     params = st.query_params
     if "ref" in params and "ref_checked" not in st.session_state:
         st.session_state.logged_in = True
@@ -173,19 +173,19 @@ def check_auth():
         st.session_state.ref_checked = True
 
     if not st.session_state.logged_in:
-        st.markdown("<div style='text-align:center; padding-top: 100px;'><h1>Pulse Login</h1><p>Inicie sesión para continuar</p></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; padding-top: 100px;'><h1>Pulse Login</h1></div>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 1.2, 1])
         with col2:
             u = st.text_input("Usuario")
             p = st.text_input("Contraseña", type="password")
-            if st.button("Entrar al Dashboard"):
+            if st.button("Entrar"):
                 creds = {"fabian": "1234", "xammy": "1234", "brayan": "1234", "diegomonta": "1234"}
                 if u.lower() in creds and creds[u.lower()] == p:
                     st.session_state.logged_in = True
                     st.session_state.user_name = u.lower()
                     st.session_state.is_guest = False
                     st.rerun()
-                else: st.error("Acceso incorrecto")
+                else: st.error("Acceso denegado")
         return False
     return True
 
@@ -204,10 +204,9 @@ if check_auth():
         st.session_state.clear()
         st.rerun()
 
-    # --- SECCIÓN REGISTRO ---
+    # --- REGISTRO ---
     if opcion == "📝 Registro":
-        st.title("🗳️ Nuevo Registro Ciudadano")
-        # El formulario usa una key dinámica para resetearse por completo
+        st.title("🗳️ Nuevo Registro")
         with st.form(key=f"form_pulse_{st.session_state.f_reset}", clear_on_submit=False):
             c1, c2 = st.columns(2)
             with c1:
@@ -216,26 +215,25 @@ if check_auth():
                 tel = st.text_input("Teléfono")
             with c2:
                 ocu = st.text_input("Ocupación")
-                dir = st.text_input("Dirección")
+                dire = st.text_input("Dirección")
                 bar = st.text_input("Barrio")
             ciu = st.text_input("Municipio", value="BUGA")
             pue = st.text_input("Puesto Votación (Opcional)")
             
             if st.form_submit_button("GUARDAR REGISTRO"):
                 if nom and ced and tel:
-                    if save_data({"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dir.upper(),"barrio":bar.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}):
-                        st.success("✅ ¡Registro guardado con éxito!")
-                        # Acción de reseteo: incrementamos la key del formulario
-                        st.session_state.f_reset += 1
-                        time.sleep(1.2)
+                    if save_data({"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dire.upper(),"barrio":bar.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}):
+                        st.success("✅ ¡Registro guardado!")
+                        st.session_state.f_reset += 1 # Limpieza de campos al cambiar la key
+                        time.sleep(1)
                         st.rerun()
-                else: st.warning("Nombre, Cédula y Teléfono son obligatorios")
+                else: st.warning("Complete Nombre, Cédula y Teléfono")
 
-    # --- SECCIÓN ESTADÍSTICAS ---
+    # --- ESTADÍSTICAS ---
     elif opcion == "📊 Estadísticas":
         df = get_data()
         if not df.empty:
-            st.title("Pulse Analytics | Valle del Cauca")
+            st.title("Pulse Analytics | Panel de Gestión")
             
             # 1. META HERO
             total = len(df)
@@ -267,13 +265,12 @@ if check_auth():
             for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
                 col.markdown(f"""<div class="pulse-card"><div class="pulse-label">{lab}</div><div class="pulse-value">{val:,}</div></div>""", unsafe_allow_html=True)
 
-            st.markdown("<br>", unsafe_allow_html=True)
-
             # 3. MAPA Y LEADERBOARD
+            st.markdown("<br>", unsafe_allow_html=True)
             c_map, c_rank = st.columns([1.6, 1])
             
             with c_map:
-                st.subheader("📍 Cobertura Territorial")
+                st.subheader("📍 Mapa Territorial del Valle")
                 m_df = df.copy()
                 m_df['M_Map'] = m_df['Ciudad'].apply(normalizar_muni)
                 map_data = m_df['M_Map'].value_counts().reset_index()
@@ -281,7 +278,7 @@ if check_auth():
                 
                 geojson = load_valle_geojson()
                 if geojson:
-                    # Mapa Coroplético (El dibujo del mapa)
+                    # Mapa de Calor sobre dibujo vectorial (Choropleth)
                     fig = px.choropleth(
                         map_data, geojson=geojson, locations='Municipio',
                         featureidkey="properties.name", color='Registros',
@@ -291,11 +288,10 @@ if check_auth():
                     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550, coloraxis_showscale=False)
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 else:
-                    st.error("No se pudo cargar el dibujo del mapa. Mostrando tabla resumen.")
-                    st.dataframe(map_data, use_container_width=True)
+                    st.info("Cargando dibujo del mapa...")
 
             with c_rank:
-                st.subheader("🏆 Leaderboard")
+                st.subheader("🏆 TOP Líderes")
                 ranking = df['Registrado Por'].value_counts().reset_index()
                 ranking.columns = ['Líder', 'Total']
                 for i, row in ranking.head(10).iterrows():
@@ -307,23 +303,23 @@ if check_auth():
                     """, unsafe_allow_html=True)
                 
                 st.markdown("<br>", unsafe_allow_html=True)
-                sel_lider = st.selectbox("Detalles de líder:", ["-- Seleccionar --"] + list(ranking['Líder']))
+                sel_lider = st.selectbox("Explorar líder:", ["-- Seleccionar --"] + list(ranking['Líder']))
                 if sel_lider != "-- Seleccionar --":
                     st.dataframe(df[df['Registrado Por'] == sel_lider][['Nombre', 'Ciudad']].tail(10), use_container_width=True, hide_index=True)
 
             # 4. TENDENCIA
             st.markdown("---")
-            st.subheader("📈 Actividad de Ingresos")
+            st.subheader("📈 Ritmo de Crecimiento")
             trend = df.groupby('F_S').size().reset_index(name='Ingresos')
-            fig_trend = px.area(trend, x='F_S', y='Ingresos', color_discrete_sequence=['#E91E63'])
-            fig_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=300, xaxis_title=None, yaxis_title=None)
-            st.plotly_chart(fig_trend, use_container_width=True)
+            fig_t = px.area(trend, x='F_S', y='Ingresos', color_discrete_sequence=['#E91E63'])
+            fig_t.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=300, xaxis_title=None, yaxis_title=None)
+            st.plotly_chart(fig_t, use_container_width=True)
 
     elif opcion == "🔍 Búsqueda":
-        st.title("🔍 Explorador de Registros")
+        st.title("🔍 Buscador de Registros")
         df = get_data()
         if not df.empty:
-            q = st.text_input("Buscar por Nombre, Cédula o Ciudad").upper()
+            q = st.text_input("Nombre, Cédula o Ciudad").upper()
             if q:
                 res = df[df.astype(str).apply(lambda x: q in x.values, axis=1)]
                 st.dataframe(res, use_container_width=True)
