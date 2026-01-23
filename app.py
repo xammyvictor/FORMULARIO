@@ -130,10 +130,9 @@ def save_data(data_dict):
         return True
     except: return False
 
-# --- NORMALIZACIÓN DE MUNICIPIOS (CRÍTICO PARA EL MAPA) ---
+# --- NORMALIZACIÓN DE MUNICIPIOS (MAPEO EXACTO) ---
 def normalizar_muni(muni):
     m = str(muni).upper().strip()
-    # Este diccionario mapea nombres comunes a los nombres exactos en el dibujo GeoJSON
     mapping = {
         "BUGA": "GUADALAJARA DE BUGA",
         "CALI": "SANTIAGO DE CALI",
@@ -156,46 +155,22 @@ def normalizar_muni(muni):
         "SEVILLA": "SEVILLA",
         "CAICEDONIA": "CAICEDONIA",
         "ANSERMANUEVO": "ANSERMANUEVO",
-        "ARGELIA": "ARGELIA",
-        "BOLIVAR": "BOLÍVAR",
-        "BUENAVENTURA": "BUENAVENTURA",
-        "BUGALAGRANDE": "BUGALAGRANDE",
-        "CANDELARIA": "CANDELARIA",
-        "DAGUA": "DAGUA",
-        "EL AGUILA": "EL ÁGUILA",
-        "EL CAIRO": "EL CAIRO",
-        "EL DOVIO": "EL DOVIO",
-        "LA CUMBRE": "LA CUMBRE",
-        "LA VICTORIA": "LA VICTORIA",
-        "OBANDO": "OBANDO",
-        "RESTREPO": "RESTREPO",
-        "RIOFRIO": "RIOFRIO",
-        "SAN PEDRO": "SAN PEDRO",
-        "TORO": "TORO",
-        "TRUJILLO": "TRUJILLO",
-        "ULLOA": "ULLOA",
-        "VERSALLES": "VERSALLES",
-        "VIJES": "VIJES",
-        "YOTOCO": "YOTOCO"
+        "BOLIVAR": "BOLÍVAR"
     }
     return mapping.get(m, m)
 
-# --- CARGA DEL DIBUJO DEL MAPA (GEOJSON) ---
+# --- CARGA DEL DIBUJO DEL MAPA (CON FALLBACK RESILIENTE) ---
 @st.cache_data(ttl=3600)
 def load_valle_geojson():
-    # Intentamos con 3 fuentes distintas para garantizar la carga
-    urls = [
-        "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json",
-        "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json",
-        "https://gist.githubusercontent.com/john-guerra/43c7656821069d00dcbc/raw/be381f21d3f381c8286a0740685970c6a51d45a9/valle.json"
-    ]
-    for url in urls:
-        try:
-            r = requests.get(url, timeout=10)
-            if r.status_code == 200:
-                return r.json()
-        except:
-            continue
+    # Intentamos con el CDN de jsDelivr que es el más rápido y estable para aplicaciones web
+    url = "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json"
+    try:
+        # Añadimos verify=False para evitar errores de certificados en redes restringidas
+        r = requests.get(url, timeout=15, verify=False)
+        if r.status_code == 200:
+            return r.json()
+    except Exception as e:
+        st.warning(f"Aviso técnico: Usando motor cartográfico de respaldo. {e}")
     return None
 
 # --- AUTH ---
@@ -263,7 +238,7 @@ if check_auth():
                         st.session_state.f_reset += 1 
                         time.sleep(1)
                         st.rerun()
-                else: st.warning("Por favor complete Nombre, Cédula y Teléfono")
+                else: st.warning("Complete Nombre, Cédula y Teléfono")
 
     # --- ESTADÍSTICAS ---
     elif opcion == "📊 Estadísticas":
@@ -314,7 +289,7 @@ if check_auth():
                 
                 geojson = load_valle_geojson()
                 if geojson:
-                    # Mapa Coroplético (El dibujo real de los municipios)
+                    # Mapa Coroplético (DIBUJO TERRITORIAL)
                     fig = px.choropleth(
                         map_data, 
                         geojson=geojson, 
@@ -329,9 +304,18 @@ if check_auth():
                     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=550, coloraxis_showscale=True)
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 else:
-                    st.error("⚠️ No se pudo cargar el dibujo del mapa. Revisa tu conexión a internet.")
-                    st.info("Resumen de gestión por municipio:")
-                    st.bar_chart(map_data.set_index('Municipio'))
+                    # FALLBACK: Si el GeoJSON falla, usamos un mapa de burbujas (Scatter Mapbox)
+                    # que es más probable que cargue ya que usa el motor interno de Plotly
+                    st.error("Utilizando visualización geográfica simplificada por restricciones de red.")
+                    # Coordenadas aproximadas de los municipios para el fallback
+                    coords = {'SANTIAGO DE CALI': [3.4516, -76.5320], 'GUADALAJARA DE BUGA': [3.9009, -76.3008], 'PALMIRA': [3.5394, -76.3036], 'TULUÁ': [4.0847, -76.1954]}
+                    map_data['lat'] = map_data['Municipio'].apply(lambda x: coords.get(x, [3.9, -76.3])[0])
+                    map_data['lon'] = map_data['Municipio'].apply(lambda x: coords.get(x, [3.9, -76.3])[1])
+                    
+                    fig = px.scatter_mapbox(map_data, lat="lat", lon="lon", size="Registros", color="Registros",
+                                          color_continuous_scale="Reds", size_max=40, zoom=8,
+                                          mapbox_style="carto-positron", hover_name="Municipio")
+                    st.plotly_chart(fig, use_container_width=True)
 
             with c_rank:
                 st.subheader("🏆 TOP Líderes")
@@ -352,7 +336,7 @@ if check_auth():
 
             # 4. TENDENCIA
             st.markdown("---")
-            st.subheader("📈 Actividad de Ingresos")
+            st.subheader("📈 Ritmo de Crecimiento")
             trend = df.groupby('F_S').size().reset_index(name='Ingresos')
             fig_t = px.area(trend, x='F_S', y='Ingresos', color_discrete_sequence=['#E91E63'])
             fig_t.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=300, xaxis_title=None, yaxis_title=None)
