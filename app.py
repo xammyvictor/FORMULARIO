@@ -312,8 +312,14 @@ if check_auth():
                 
                 try:
                     geojson_url = "https://raw.githubusercontent.com/santiblanko/colombia.geojson/master/mpio.json"
-                    response = requests.get(geojson_url)
-                    geojson_data = response.json()
+geojson_data = requests.get(geojson_url).json()
+
+# FILTRAR SOLO VALLE DEL CAUCA
+geojson_data["features"] = [
+    f for f in geojson_data["features"]
+    if f["properties"]["DPTO_CNMBR"] == "VALLE DEL CAUCA"
+]
+
                     
                     if map_mode == "Coropleta Territorial":
                         # Mapa de Calor por regiones (Dibujo limpio)
@@ -321,7 +327,7 @@ if check_auth():
                             map_data, 
                             geojson=geojson_data, 
                             locations='Municipio',
-                            featureidkey="properties.name", 
+                            featureidkey="properties.MPIO_CNMBR", 
                             color='Registros',
                             color_continuous_scale="YlOrRd", # Amarillo -> Naranja -> Rojo (Intuitivo)
                             template="plotly_white",
