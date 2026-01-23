@@ -26,62 +26,36 @@ st.set_page_config(
 
 # --- 2. FUNCIONES DE NORMALIZACIÓN ---
 def normalizar(texto):
-    """Limpia el texto de tildes, espacios y lo pasa a mayúsculas de forma estricta."""
+    """Limpia el texto de tildes, espacios y lo pasa a mayúsculas."""
     if not texto: return ""
     texto = str(texto).upper().strip()
     texto = unicodedata.normalize("NFD", texto)
     texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
     return " ".join(texto.split())
 
-def normalizar_para_mapa(muni):
-    """Convierte nombres de la base de datos a los nombres oficiales del GeoJSON DANE."""
+def traducir_nombre_db(muni):
+    """
+    Traduce nombres comunes de la base de datos al nombre oficial del mapa.
+    Solo se aplica a la base de datos para hacer el 'match' con el GeoJSON.
+    """
     m = normalizar(muni)
     
-    # REGLA DE ORO PARA CALI: Asegurar coincidencia con SANTIAGO DE CALI
-    if "CALI" in m:
-        return "SANTIAGO DE CALI"
-    
+    # DICCIONARIO DE TRADUCCIÓN (DB -> MAPA)
     mapping = {
+        "CALI": "SANTIAGO DE CALI",
+        "SANTIAGO DE CALI": "SANTIAGO DE CALI",
         "BUGA": "GUADALAJARA DE BUGA",
-        "GUADALAJARA DE BUGA": "GUADALAJARA DE BUGA",
         "JAMUNDI": "JAMUNDI",
         "TULUA": "TULUA",
         "GUACARI": "GUACARI",
         "DARIEN": "CALIMA",
-        "CALIMA": "CALIMA",
         "LA UNION": "LA UNION",
         "RIOFRIO": "RIOFRIO",
         "ANDALUCIA": "ANDALUCIA",
         "YUMBO": "YUMBO",
         "PALMIRA": "PALMIRA",
         "DAGUA": "DAGUA",
-        "CARTAGO": "CARTAGO",
-        "EL CERRITO": "EL CERRITO",
-        "BUGALAGRANDE": "BUGALAGRANDE",
-        "CAICEDONIA": "CAICEDONIA",
-        "FLORIDA": "FLORIDA",
-        "GINEBRA": "GINEBRA",
-        "PRADERA": "PRADERA",
-        "RESTREPO": "RESTREPO",
-        "ROLDANILLO": "ROLDANILLO",
-        "SEVILLA": "SEVILLA",
-        "ZARZAL": "ZARZAL",
-        "EL DOVIO": "EL DOVIO",
-        "LA VICTORIA": "LA VICTORIA",
-        "OBANDO": "OBANDO",
-        "ANSERMANUEVO": "ANSERMANUEVO",
-        "ARGELIA": "ARGELIA",
-        "BOLIVAR": "BOLIVAR",
-        "EL CAIRO": "EL CAIRO",
-        "EL AGUILA": "EL AGUILA",
-        "LA CUMBRE": "LA CUMBRE",
-        "SAN PEDRO": "SAN PEDRO",
-        "TORO": "TORO",
-        "TRUJILLO": "TRUJILLO",
-        "ULLOA": "ULLOA",
-        "VERSALLES": "VERSALLES",
-        "VIJES": "VIJES",
-        "YOTOCO": "YOTOCO"
+        "CARTAGO": "CARTAGO"
     }
     return mapping.get(m, m)
 
@@ -212,10 +186,11 @@ def get_valle_geojson(url):
             valle_features = []
             for feature in data["features"]:
                 props = feature["properties"]
+                # Código DANE del Valle del Cauca es 76
                 if str(props.get("DPTO_CCDGO")) == "76":
-                    # Usamos la misma función de normalización para el ID del mapa
-                    m_id = normalizar_para_mapa(props.get("MPIO_CNMBR", ""))
-                    feature["id"] = m_id
+                    # El ID del feature será el nombre oficial normalizado (ej. SANTIAGO DE CALI)
+                    m_name = normalizar(props.get("MPIO_CNMBR", ""))
+                    feature["id"] = m_name
                     valle_features.append(feature)
             
             if valle_features:
@@ -293,6 +268,7 @@ def view_estadisticas():
 
     st.title("Pulse Analytics | Valle del Cauca")
     
+    # --- HERO ---
     total = len(df)
     perc = min((total / META_REGISTROS) * 100, 100)
     st.markdown(f"""
@@ -311,6 +287,7 @@ def view_estadisticas():
         </div>
     """, unsafe_allow_html=True)
 
+    # --- KPIs ---
     k1, k2, k3, k4 = st.columns(4)
     hoy = datetime.now()
     df['F_S'] = df['Fecha Registro'].dt.date
@@ -321,11 +298,13 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("Últ. 8 días", v_8d), ("Últ. 30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
+    # --- MAPA MAXIMIZADO ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📍 Visualización Territorial Departamental")
     
     m_df = df.copy()
-    m_df['ID_MPIO'] = m_df['Ciudad'].apply(normalizar_para_mapa)
+    # Traducimos lo de la DB al nombre oficial (Ej: Cali -> Santiago de Cali)
+    m_df['ID_MPIO'] = m_df['Ciudad'].apply(traducir_nombre_db)
     counts = m_df['ID_MPIO'].value_counts().reset_index()
     counts.columns = ['ID_MPIO', 'Registros']
     
@@ -335,8 +314,10 @@ def view_estadisticas():
         geojson_data = get_valle_geojson(URL_GITHUB_GEO)
         if geojson_data:
             all_features = geojson_data["features"]
+            # Lista de IDs oficiales en el mapa
             all_ids = [f["id"] for f in all_features]
             
+            # Cálculo de posiciones para etiquetas de texto
             lats, lons, names = [], [], []
             for f in all_features:
                 coords = f["geometry"]["coordinates"]
@@ -347,20 +328,25 @@ def view_estadisticas():
                 
                 lons.append(coords_flat[:, 0].mean())
                 lats.append(coords_flat[:, 1].mean())
+                # Usamos el nombre original de la propiedad para la etiqueta visual
                 names.append(f["properties"].get("MPIO_CNMBR", ""))
 
+            # Aseguramos que todos los municipios del mapa existan en los datos (con 0 si no hay)
             df_base = pd.DataFrame({"ID_MPIO": all_ids})
             map_data_full = df_base.merge(counts, on='ID_MPIO', how='left').fillna(0)
             
+            # CREACIÓN DEL MAPA
             fig = px.choropleth(
                 map_data_full, 
                 geojson=geojson_data, 
                 locations='ID_MPIO',
                 color='Registros',
+                # Escala: 0 es blanco, >0 es degradado Pulse
                 color_continuous_scale=[[0, 'white'], [0.0001, '#FCE4EC'], [1, '#E91E63']],
                 labels={'Registros': 'Total'}
             )
             
+            # CAPA DE TEXTO (Nombres sobre los municipios)
             fig.add_trace(go.Scattergeo(
                 lat=lats,
                 lon=lons,
@@ -371,15 +357,33 @@ def view_estadisticas():
                 showlegend=False
             ))
             
-            fig.update_geos(fitbounds="locations", visible=False, showframe=False, projection_type="mercator")
-            fig.update_traces(marker_line_width=1.8, marker_line_color="black", selector=dict(type='choropleth'))
+            # CONFIGURACIÓN GEOGRÁFICA
+            fig.update_geos(
+                fitbounds="locations", 
+                visible=False, 
+                showframe=False, 
+                projection_type="mercator"
+            )
+            
+            # FRONTERAS NEGRAS
+            fig.update_traces(
+                marker_line_width=1.8, 
+                marker_line_color="black", 
+                selector=dict(type='choropleth')
+            )
             
             fig.update_layout(
                 margin={"r":0,"t":0,"l":0,"b":0}, 
                 height=1000,
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
-                coloraxis_colorbar=dict(title="REGISTROS", thickness=30, len=0.6, yanchor="middle", y=0.5, xanchor="left", x=0.02)
+                coloraxis_colorbar=dict(
+                    title="REGISTROS", 
+                    thickness=30, 
+                    len=0.6, 
+                    yanchor="middle", y=0.5, 
+                    xanchor="left", x=0.02
+                )
             )
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         else:
@@ -397,6 +401,7 @@ def view_estadisticas():
             """, unsafe_allow_html=True)
 
     st.markdown("---")
+    # --- LEADERBOARD ---
     c_rank, c_trend = st.columns([1, 1.5])
     
     with c_rank:
