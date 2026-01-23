@@ -294,7 +294,7 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA ---
+    # --- MAPA RECONFIGURADO (FONDO BLANCO Y DEMARCACIÓN) ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📍 Concentración Territorial (Valle del Cauca)")
     
@@ -308,22 +308,30 @@ def view_estadisticas():
     with c_map_view:
         geojson_data = get_valle_geojson(URL_GITHUB_GEO)
         if geojson_data:
+            # Choropleth con estilo light (fondo blanco)
             fig = px.choropleth_mapbox(
                 map_data, 
                 geojson=geojson_data, 
                 locations='ID_MPIO',
                 color='Registros',
                 color_continuous_scale="Reds",
-                mapbox_style="carto-darkmatter", # Estilo Darkmatter profesional
+                mapbox_style="carto-positron", # Cambiado a POSITRON para fondo blanco/claro
                 center={"lat": 3.85, "lon": -76.3},
                 zoom=7.8,
-                opacity=0.8,
+                opacity=0.7,
                 labels={'Registros': 'Total'}
             )
+            
+            # Forzar demarcación de líneas de municipios
+            fig.update_traces(
+                marker_line_width=1.5,
+                marker_line_color="#475569" # Gris oscuro para resaltar límites
+            )
+            
             fig.update_layout(
                 margin={"r":0,"t":0,"l":0,"b":0}, 
                 height=600,
-                paper_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="white",
                 coloraxis_colorbar=dict(title="DENSIDAD", thickness=15)
             )
             st.plotly_chart(fig, use_container_width=True)
