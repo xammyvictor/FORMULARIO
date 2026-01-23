@@ -77,24 +77,20 @@ st.markdown("""
         transition: width 1.5s ease;
     }
 
-    /* Ranking Items */
-    .rank-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 16px;
-        background: white;
-        border-radius: 18px;
-        margin-bottom: 10px;
-        border: 1px solid #F1F5F9;
-    }
-    .rank-num { width: 32px; height: 32px; background: #FCE4EC; color: var(--pulse-pink); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.8rem; margin-right: 12px; }
-    .rank-name { font-weight: 700; color: #1E293B; font-size: 0.95rem; }
-    .rank-badge { background: #F8FAFC; color: #64748B; padding: 6px 14px; border-radius: 12px; font-weight: 700; font-size: 0.8rem; border: 1px solid #E2E8F0; }
-
     /* Formulario */
     .stButton>button { border-radius: 14px !important; background: var(--pulse-pink) !important; font-weight: 700 !important; color: white !important; border: none !important; width: 100%; height: 3.5rem; }
     .stTextInput>div>div>input { border-radius: 12px !important; }
+    
+    /* Hotspot Tag */
+    .hotspot-tag {
+        padding: 4px 12px;
+        background: #FCE4EC;
+        color: #E91E63;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        border: 1px solid #F8BBD0;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -134,7 +130,7 @@ def save_data(data_dict):
         return True
     except: return False
 
-# --- NORMALIZACIÓN DE MUNICIPIOS ---
+# --- NORMALIZACIÓN DE MUNICIPIOS (VITAL PARA EL MAPA) ---
 def normalizar_para_mapa(muni):
     m = str(muni).upper().strip()
     mapping = {
@@ -157,21 +153,29 @@ def normalizar_para_mapa(muni):
         "GINEBRA": "GINEBRA",
         "LA UNION": "LA UNIÓN",
         "SEVILLA": "SEVILLA",
-        "CAICEDONIA": "CAICEDONIA"
+        "CAICEDONIA": "CAICEDONIA",
+        "ANSERMANUEVO": "ANSERMANUEVO",
+        "BOLIVAR": "BOLÍVAR"
     }
     return mapping.get(m, m)
 
-# --- CARGA DEL DIBUJO DEL MAPA ---
+# --- CARGA DEL DIBUJO DEL MAPA (CON DOBLE FUENTE) ---
 @st.cache_data(ttl=3600)
 def load_valle_geojson():
-    # CDN estable para el dibujo de municipios
-    url = "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json"
-    try:
-        r = requests.get(url, timeout=15, verify=False)
-        if r.status_code == 200:
-            return r.json()
-    except:
-        return None
+    # Intento 1: CDN jsDelivr (Muy estable)
+    # Intento 2: GitHub Raw (Fuente oficial)
+    urls = [
+        "https://cdn.jsdelivr.net/gh/finiterank/mapa-colombia-json@master/valle-del-cauca.json",
+        "https://raw.githubusercontent.com/finiterank/mapa-colombia-json/master/valle-del-cauca.json"
+    ]
+    for url in urls:
+        try:
+            r = requests.get(url, timeout=10, verify=False)
+            if r.status_code == 200:
+                return r.json()
+        except:
+            continue
+    return None
 
 # --- AUTH ---
 def check_auth():
@@ -215,7 +219,7 @@ if check_auth():
         st.session_state.clear()
         st.rerun()
 
-    # --- SECCIÓN REGISTRO ---
+    # --- REGISTRO ---
     if opcion == "📝 Registro":
         st.title("🗳️ Nuevo Registro")
         with st.form(key=f"form_pulse_{st.session_state.f_reset}", clear_on_submit=False):
@@ -234,13 +238,13 @@ if check_auth():
             if st.form_submit_button("GUARDAR REGISTRO"):
                 if nom and ced and tel:
                     if save_data({"nombre":nom.upper(),"cedula":ced,"telefono":tel,"ocupacion":ocu.upper(),"direccion":dire.upper(),"barrio":bar.upper(),"ciudad":ciu.upper(),"puesto":pue.upper()}):
-                        st.success("✅ ¡Registro guardado!")
+                        st.success("✅ ¡Registro guardado con éxito!")
                         st.session_state.f_reset += 1 
                         time.sleep(1)
                         st.rerun()
-                else: st.warning("Complete Nombre, Cédula y Teléfono")
+                else: st.warning("Nombre, Cédula y Teléfono son obligatorios")
 
-    # --- SECCIÓN ESTADÍSTICAS ---
+    # --- ESTADÍSTICAS ---
     elif opcion == "📊 Estadísticas":
         df = get_data()
         if not df.empty:
@@ -276,12 +280,12 @@ if check_auth():
             for col, (lab, val) in zip([k1, k2, k3, k4], [("Hoy", v_hoy), ("8 días", v_8d), ("30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]):
                 col.markdown(f"""<div class="pulse-card"><div class="pulse-label">{lab}</div><div class="pulse-value">{val:,}</div></div>""", unsafe_allow_html=True)
 
-            # 3. MAPA DE COROPLETAS (DIBUJO VECTORIAL)
+            # 3. MAPA DE COROPLETAS
             st.markdown("<br>", unsafe_allow_html=True)
             c_map, c_rank = st.columns([1.6, 1])
             
             with c_map:
-                st.subheader("📍 Mapa de Coropletas Territorial")
+                st.subheader("📍 Mapa Territorial del Valle")
                 m_df = df.copy()
                 m_df['Municipio_Map'] = m_df['Ciudad'].apply(normalizar_para_mapa)
                 map_data = m_df['Municipio_Map'].value_counts().reset_index()
@@ -289,7 +293,7 @@ if check_auth():
                 
                 geojson = load_valle_geojson()
                 if geojson:
-                    # Mapa de Coropletas Real
+                    # Choropleth real (Dibujo de municipios)
                     fig = px.choropleth(
                         map_data, 
                         geojson=geojson, 
@@ -300,12 +304,8 @@ if check_auth():
                         template="plotly_white",
                         hover_name="Municipio"
                     )
-                    # Configuramos para ver SOLO el dibujo (silueta)
-                    fig.update_geos(
-                        fitbounds="locations", 
-                        visible=False,
-                        projection_type="mercator"
-                    )
+                    # Forzamos enfoque y ocultamos el mapa mundial
+                    fig.update_geos(fitbounds="locations", visible=False)
                     fig.update_layout(
                         margin={"r":0,"t":0,"l":0,"b":0}, 
                         height=550, 
@@ -315,23 +315,25 @@ if check_auth():
                     )
                     st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 else:
-                    st.error("Error al cargar el dibujo territorial del Valle del Cauca.")
-                    st.dataframe(map_data, use_container_width=True)
+                    st.error("Error al cargar el dibujo territorial. Mostrando tabla de datos:")
+                    st.dataframe(map_data, use_container_width=True, hide_index=True)
 
             with c_rank:
-                st.subheader("🏆 TOP 10 Líderes")
+                st.subheader("🏆 TOP Líderes")
                 ranking = df['Registrado Por'].value_counts().reset_index()
                 ranking.columns = ['Líder', 'Total']
                 for i, row in ranking.head(10).iterrows():
                     st.markdown(f"""
-                        <div class="rank-item">
-                            <div class="rank-info">
-                                <div class="rank-num">{i+1}</div>
-                                <span class="rank-name">{row['Líder'].upper()}</span>
-                            </div>
-                            <span class="rank-badge">{row['Total']} regs</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #F1F5F9;">
+                            <span style="font-weight:700; color:#1E293B;">{i+1}. {row['Líder'].upper()}</span>
+                            <span class="hotspot-tag">{row['Total']} regs</span>
                         </div>
                     """, unsafe_allow_html=True)
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                sel_lider = st.selectbox("Explorar líder:", ["-- Seleccionar --"] + list(ranking['Líder']))
+                if sel_lider != "-- Seleccionar --":
+                    st.dataframe(df[df['Registrado Por'] == sel_lider][['Nombre', 'Ciudad']].tail(10), use_container_width=True, hide_index=True)
 
             # 4. TENDENCIA
             st.markdown("---")
@@ -342,7 +344,7 @@ if check_auth():
             st.plotly_chart(fig_t, use_container_width=True)
 
     elif opcion == "🔍 Búsqueda":
-        st.title("🔍 Buscador de Registros")
+        st.title("🔍 Explorador de Registros")
         df = get_data()
         if not df.empty:
             q = st.text_input("Buscar por Nombre, Cédula o Ciudad").upper()
