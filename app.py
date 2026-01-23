@@ -239,17 +239,7 @@ if check_auth():
                     "caticoa3/colombia_mapa/master/"
                     "co_2018_MGN_MPIO_POLITICO.geojson"
                 )
-                geojson_data = requests.get(geojson_url).json()
-
-geo_names = {f["properties"]["NOM_MPIO"] for f in geojson_data["features"]}
-
-st.write("Municipios en GEOJSON que contienen BUGA:")
-st.write([n for n in geo_names if "BUGA" in n])
-
-st.write("Municipio en tus datos:")
-st.write(map_data["Municipio"].unique())
-
-
+              
 
                 
                 fig = px.choropleth(
