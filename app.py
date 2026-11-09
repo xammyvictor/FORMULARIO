@@ -15,11 +15,11 @@ from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 
 # --- 1. CONFIGURACIÓN Y CONSTANTES ---
-META_REGISTROS = 12000
+META_REGISTROS = 4000
 USUARIOS_ADMIN = ["fabian", "xammy", "brayan"]
 
 st.set_page_config(
-    page_title="Maria Irma | Pulse Analytics - Pasto",
+    page_title="Pulse Analytics - Pasto",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -331,7 +331,7 @@ def view_estadisticas():
             fig_bot7.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=320, xaxis_title=None, yaxis_title=None, coloraxis_showscale=False)
             st.plotly_chart(fig_bot7, use_container_width=True)
 
-    # --- GRÁFICO DE TORTA: VOTOS EFECTIVOS VS NOVEDADES ---
+    # --- GRÁFICO DE TORTA MEJORADO (SOLO CANTIDADES Y LEYENDA FUERA) ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("⚖️ Comparativa: Votos Efectivos vs. Novedades Encontradas")
     
@@ -341,6 +341,7 @@ def view_estadisticas():
         resumen_nov = df['Estado_Voto'].value_counts().reset_index()
         resumen_nov.columns = ['Categoría', 'Cantidad']
 
+        # Usamos px.pie configurando textinfo='value' para mostrar solo la cantidad de votos y leyenda externa
         fig_pie = px.pie(
             resumen_nov, 
             names='Categoría', 
@@ -354,8 +355,14 @@ def view_estadisticas():
                 'Ciudadano repetido': '#6366F1'
             }
         )
-        fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-        fig_pie.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=400)
+        # Mostramos únicamente el valor numérico (cantidad de votos) y ocultamos etiquetas internas
+        fig_pie.update_traces(textinfo='value', textposition='outside')
+        fig_pie.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)', 
+            paper_bgcolor='rgba(0,0,0,0)', 
+            height=400,
+            legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
+        )
         st.plotly_chart(fig_pie, use_container_width=True)
     else:
         st.info("Columna de 'Novedades' no detectada en el DataFrame.")
