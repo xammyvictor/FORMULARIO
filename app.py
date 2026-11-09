@@ -194,7 +194,12 @@ def get_pasto_geojson(url):
 
 # --- 5. LÓGICA DE AUTENTICACIÓN ---
 def check_auth():
-    if "logged_in" not in st.session_state: st.session_state.logged_in = False
+    if "logged_in" not in st.session_state: 
+        st.session_state.logged_in = False
+    if "user_name" not in st.session_state: 
+        st.session_state.user_name = "Anónimo"
+    if "is_guest" not in st.session_state: 
+        st.session_state.is_guest = False
     
     params = st.query_params
     if "ref" in params and "ref_checked" not in st.session_state:
@@ -336,18 +341,21 @@ def view_estadisticas():
     
     with c_rank:
         st.subheader("🏆 Leaderboard de Líderes")
-        ranking = df['Registrado Por'].value_counts().reset_index()
-        ranking.columns = ['Líder', 'Total']
-        for i, row in ranking.head(8).iterrows():
-            st.markdown(f"""
-                <div class="rank-item">
-                    <div style="display:flex; align-items:center;">
-                        <div class="rank-num">{i+1}</div>
-                        <span class="rank-name">{row['Líder'].upper()}</span>
+        if 'Registrado Por' in df.columns:
+            ranking = df['Registrado Por'].value_counts().reset_index()
+            ranking.columns = ['Líder', 'Total']
+            for i, row in ranking.head(8).iterrows():
+                st.markdown(f"""
+                    <div class="rank-item">
+                        <div style="display:flex; align-items:center;">
+                            <div class="rank-num">{i+1}</div>
+                            <span class="rank-name">{row['Líder'].upper()}</span>
+                        </div>
+                        <span class="rank-badge">{row['Total']} regs</span>
                     </div>
-                    <span class="rank-badge">{row['Total']} regs</span>
-                </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
+        else:
+            st.info("Columna 'Registrado Por' no encontrada en la base de datos.")
 
     with c_trend:
         st.subheader("📈 Actividad Histórica")
