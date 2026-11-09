@@ -15,11 +15,11 @@ from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 
 # --- 1. CONFIGURACIÓN Y CONSTANTES ---
-META_REGISTROS = 4000
+META_REGISTROS = 12000
 USUARIOS_ADMIN = ["fabian", "xammy", "brayan"]
 
 st.set_page_config(
-    page_title="Pulse Analytics - Pasto",
+    page_title="Maria Irma | Pulse Analytics - Pasto",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -331,7 +331,7 @@ def view_estadisticas():
             fig_bot7.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=320, xaxis_title=None, yaxis_title=None, coloraxis_showscale=False)
             st.plotly_chart(fig_bot7, use_container_width=True)
 
-    # --- GRÁFICO DE TORTA MEJORADO (SOLO CANTIDADES Y LEYENDA FUERA) ---
+    # --- GRÁFICO DE TORTA MEJORADO: VOTOS EFECTIVOS VS NOVEDADES ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("⚖️ Comparativa: Votos Efectivos vs. Novedades Encontradas")
     
@@ -341,7 +341,6 @@ def view_estadisticas():
         resumen_nov = df['Estado_Voto'].value_counts().reset_index()
         resumen_nov.columns = ['Categoría', 'Cantidad']
 
-        # Usamos px.pie configurando textinfo='value' para mostrar solo la cantidad de votos y leyenda externa
         fig_pie = px.pie(
             resumen_nov, 
             names='Categoría', 
@@ -355,7 +354,6 @@ def view_estadisticas():
                 'Ciudadano repetido': '#6366F1'
             }
         )
-        # Mostramos únicamente el valor numérico (cantidad de votos) y ocultamos etiquetas internas
         fig_pie.update_traces(textinfo='value', textposition='outside')
         fig_pie.update_layout(
             plot_bgcolor='rgba(0,0,0,0)', 
@@ -366,6 +364,49 @@ def view_estadisticas():
         st.plotly_chart(fig_pie, use_container_width=True)
     else:
         st.info("Columna de 'Novedades' no detectada en el DataFrame.")
+
+    # --- NUEVO GRÁFICO: LÍDERES VS NOVEDADES ---
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("👥 Análisis de Novedades por Líder")
+    
+    col_lider = 'Registrado Por' if 'Registrado Por' in df.columns else ('Usuario' if 'Usuario' in df.columns else None)
+    if col_lider and col_novedad:
+        # Filtramos solo registros que tienen alguna novedad (excluyendo vacíos o sin novedad)
+        df_novs = df[df[col_novedad].notna() & (df[col_novedad].astype(str).str.strip() != "")].copy()
+        df_novs['Líder'] = df_novs[col_lider].astype(str).str.upper()
+        df_novs['Tipo Novedad'] = df_novs[col_novedad].astype(str).str.strip()
+
+        if not df_novs.empty:
+            # Agrupamos por líder y tipo de novedad
+            lider_nov_counts = df_novs.groupby(['Líder', 'Tipo Novedad']).size().reset_index(name='Cantidad')
+            
+            fig_lider_nov = px.bar(
+                lider_nov_counts,
+                x='Líder',
+                y='Cantidad',
+                color='Tipo Novedad',
+                barmode='group',
+                text='Cantidad',
+                color_discrete_map={
+                    'Cedula no existe': '#EF4444',
+                    'Cedula no vota': '#F59E0B',
+                    'Ciudadano repetido': '#6366F1'
+                }
+            )
+            fig_lider_nov.update_traces(textposition='outside')
+            fig_lider_nov.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                height=420,
+                xaxis_title=None,
+                yaxis_title="Cantidad de Inconsistencias",
+                legend_title="Tipo de Novedad"
+            )
+            st.plotly_chart(fig_lider_nov, use_container_width=True)
+        else:
+            st.info("¡Excelente noticia! No hay registros con novedades reportadas actualmente.")
+    else:
+        st.info("No se encontraron las columnas necesarias para el análisis de líderes y novedades.")
 
     # --- MAPA DE CALOR INTERACTIVO CON FOLIUM ---
     st.markdown("<br>", unsafe_allow_html=True)
