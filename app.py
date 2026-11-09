@@ -134,15 +134,13 @@ def apply_custom_styles():
 def get_google_sheet_client():
     try:
         if "gcp_service_account" not in st.secrets: 
-            st.error("Faltan las credenciales 'gcp_service_account' en st.secrets.")
             return None
         creds = Credentials.from_service_account_info(
             st.secrets["gcp_service_account"], 
             scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         )
         return gspread.authorize(creds)
-    except Exception as e:
-        st.error(f"Error de autorización con Google: {e}")
+    except Exception: 
         return None
 
 def get_data():
@@ -152,11 +150,13 @@ def get_data():
         sh = client.open("Base_Datos_Ciudadanos")
         df = pd.DataFrame(sh.sheet1.get_all_records())
         if not df.empty:
-            df['Fecha Registro'] = pd.to_datetime(df['Fecha Registro'], errors='coerce')
             df.columns = [c.strip() for c in df.columns]
+            # Normalizar nombres comunes si difieren en las mayúsculas o tildes
+            if 'Fecha Registro' in df.columns:
+                df['Fecha Registro'] = pd.to_datetime(df['Fecha Registro'], errors='coerce')
         return df
     except Exception as e:
-        st.error(f"No se pudo abrir la hoja de cálculo 'Base_Datos_Ciudadanos'. Error: {e}")
+        st.error(f"Error al conectar con Google Sheets: {e}")
         return pd.DataFrame()
 
 def save_data(data_dict):
@@ -276,13 +276,19 @@ def view_estadisticas():
 
     # --- KPIs ---
     hoy = datetime.now()
-    df['F_S'] = df['Fecha Registro'].dt.date
-    v_hoy = len(df[df['F_S'] == hoy.date()])
-    v_8d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=8))])
-    v_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
+    if 'Fecha Registro' in df.columns and pd.api.types.is_datetime64_any_dtype(df['Fecha Registro']):
+        df['F_S'] = df['Fecha Registro'].dt.date
+        v_hoy = len(df[df['F_S'] == hoy.date()])
+        v_8d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=8))])
+        v_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
+    else:
+        v_hoy, v_8d, v_30d = 0, 0, 0
+
+    col_comuna_name = 'Comuna' if 'Comuna' in df.columns else ('Ciudad' if 'Ciudad' in df.columns else None)
+    num_comunas = df[col_comuna_name].nunique() if col_comuna_name else 0
 
     k1, k2, k3, k4 = st.columns(4)
-    metricas = [("Hoy", v_hoy), ("Últ. 8 días", v_8d), ("Últ. 30 días", v_30d), ("Comunas Activas", df['Comuna'].nunique())]
+    metricas = [("Hoy", v_hoy), ("Últ. 8 días", v_8d), ("Últ. 30 días", v_30d), ("Comunas Activas", num_comunas)]
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
@@ -291,32 +297,38 @@ def view_estadisticas():
     st.subheader("📍 Mapa de Calor y Comunas de Pasto")
     
     m_df = df.copy()
-    m_df['ID_COMUNA'] = m_df['Comuna'].apply(normalizar_para_mapa).apply(normalizar)
-    counts = m_df['ID_COMUNA'].value_counts().reset_index()
-    counts.columns = ['ID_COMUNA', 'Registros']
-    
+    if col_comuna_name:
+        m_df['ID_COMUNA'] = m_df[col_comuna_name].apply(normalizar_para_mapa).apply(normalizar)
+        counts = m_df['ID_COMUNA'].value_counts().reset_index()
+        counts.columns = ['ID_COMUNA', 'Registros']
+    else:
+        counts = pd.DataFrame(columns=['ID_COMUNA', 'Registros'])
+
     c_map_view, c_map_stats = st.columns([5, 1])
     
     with c_map_view:
         st.info("💡 Distribución de registros por comuna en San Juan de Pasto.")
-        fig_bar = px.bar(counts, x='ID_COMUNA', y='Registros', color='Registros',
-                         color_continuous_scale=[[0, '#FCE4EC'], [1, '#E91E63']],
-                         title="Concentración de Registros por Comuna")
-        fig_bar.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=400)
-        st.plotly_chart(fig_bar, use_container_width=True)
+        if not counts.empty:
+            fig_bar = px.bar(counts, x='ID_COMUNA', y='Registros', color='Registros',
+                             color_continuous_scale=[[0, '#FCE4EC'], [1, '#E91E63']],
+                             title="Concentración de Registros por Comuna")
+            fig_bar.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=400)
+            st.plotly_chart(fig_bar, use_container_width=True)
+        else:
+            st.warning("No hay datos suficientes para graficar las comunas.")
 
     with c_map_stats:
         st.write("**🔥 Ranking Comunas**")
-        for _, row in counts.head(12).iterrows():
-            st.markdown(f"""
-                <div class="rank-item" style="padding:8px; margin-bottom:6px; border-radius:12px;">
-                    <span style="font-weight:600; font-size:0.75rem;">{row['ID_COMUNA']}</span>
-                    <span class="hotspot-pill" style="font-size:0.7rem; padding:2px 8px;">{row['Registros']}</span>
-                </div>
-            """, unsafe_allow_html=True)
-        
+        if not counts.empty:
+            for _, row in counts.head(12).iterrows():
+                st.markdown(f"""
+                    <div class="rank-item" style="padding:8px; margin-bottom:6px; border-radius:12px;">
+                        <span style="font-weight:600; font-size:0.75rem;">{row['ID_COMUNA']}</span>
+                        <span class="hotspot-pill" style="font-size:0.7rem; padding:2px 8px;">{row['Registros']}</span>
+                    </div>
+                """, unsafe_allow_html=True)
         st.markdown("---")
-        st.metric("Comunas", f"{len(counts)}/12")
+        st.metric("Comunas", f"{num_comunas}/12")
 
     # --- LEADERBOARD ---
     st.markdown("---")
@@ -324,28 +336,32 @@ def view_estadisticas():
     
     with c_rank:
         st.subheader("🏆 Leaderboard de Líderes")
-        if 'Registrado Por' in df.columns:
-            ranking = df['Registrado Por'].value_counts().reset_index()
+        col_lider = 'Registrado Por' if 'Registrado Por' in df.columns else ('Usuario' if 'Usuario' in df.columns else None)
+        if col_lider:
+            ranking = df[col_lider].value_counts().reset_index()
             ranking.columns = ['Líder', 'Total']
             for i, row in ranking.head(8).iterrows():
                 st.markdown(f"""
                     <div class="rank-item">
                         <div style="display:flex; align-items:center;">
                             <div class="rank-num">{i+1}</div>
-                            <span class="rank-name">{row['Líder'].upper()}</span>
+                            <span class="rank-name">{str(row['Líder']).upper()}</span>
                         </div>
                         <span class="rank-badge">{row['Total']} regs</span>
                     </div>
                 """, unsafe_allow_html=True)
         else:
-            st.info("Columna 'Registrado Por' no encontrada en la base de datos.")
+            st.info("Columna de líder o usuario no encontrada.")
 
     with c_trend:
         st.subheader("📈 Actividad Histórica")
-        trend = df.groupby('F_S').size().reset_index(name='Ingresos')
-        fig_trend = px.area(trend, x='F_S', y='Ingresos', color_discrete_sequence=['#E91E63'])
-        fig_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=380, xaxis_title=None, yaxis_title=None)
-        st.plotly_chart(fig_trend, use_container_width=True)
+        if 'F_S' in df.columns and not df['F_S'].isna().all():
+            trend = df.groupby('F_S').size().reset_index(name='Ingresos')
+            fig_trend = px.area(trend, x='F_S', y='Ingresos', color_discrete_sequence=['#E91E63'])
+            fig_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=380, xaxis_title=None, yaxis_title=None)
+            st.plotly_chart(fig_trend, use_container_width=True)
+        else:
+            st.info("No hay suficientes registros con fecha válida para mostrar la tendencia.")
 
 def view_busqueda():
     st.title("🔍 Explorador de Registros")
