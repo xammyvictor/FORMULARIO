@@ -10,12 +10,13 @@ import requests
 import unicodedata
 import json
 import numpy as np
+import folium
+from folium.plugins import HeatMap
+from streamlit_folium import st_folium
 
 # --- 1. CONFIGURACIÓN Y CONSTANTES ---
-URL_GITHUB_GEO = "https://raw.githubusercontent.com/johndoe/pasto-comunas/main/comunas_pasto.geojson"
 META_REGISTROS = 12000
 USUARIOS_ADMIN = ["fabian", "xammy", "brayan"]
-COMUNAS_PASTO_TOTAL = 12
 
 st.set_page_config(
     page_title="Maria Irma | Pulse Analytics - Pasto",
@@ -51,6 +52,22 @@ def normalizar_para_mapa(comuna):
         "SURORIENTAL": "COMUNA 12", "COMUNA 12": "COMUNA 12"
     }
     return mapping.get(c, c)
+
+# Coordenadas aproximadas de referencia central para las comunas urbanas de Pasto
+COORDS_COMUNAS = {
+    "COMUNA 1": [1.2140, -77.2820],
+    "COMUNA 2": [1.2230, -77.2780],
+    "COMUNA 3": [1.2100, -77.2890],
+    "COMUNA 4": [1.1990, -77.2850],
+    "COMUNA 5": [1.1910, -77.2770],
+    "COMUNA 6": [1.2180, -77.2980],
+    "COMUNA 7": [1.2070, -77.2910],
+    "COMUNA 8": [1.2200, -77.2730],
+    "COMUNA 9": [1.2300, -77.2700],
+    "COMUNA 10": [1.2200, -77.2650],
+    "COMUNA 11": [1.2000, -77.2700],
+    "COMUNA 12": [1.1850, -77.2800]
+}
 
 # --- 3. ESTILOS VISUALES ---
 def apply_custom_styles():
@@ -133,15 +150,13 @@ def apply_custom_styles():
 @st.cache_resource
 def get_google_sheet_client():
     try:
-        if "gcp_service_account" not in st.secrets: 
-            return None
+        if "gcp_service_account" not in st.secrets: return None
         creds = Credentials.from_service_account_info(
             st.secrets["gcp_service_account"], 
             scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         )
         return gspread.authorize(creds)
-    except Exception: 
-        return None
+    except Exception: return None
 
 def get_data():
     client = get_google_sheet_client()
@@ -151,7 +166,6 @@ def get_data():
         df = pd.DataFrame(sh.sheet1.get_all_records())
         if not df.empty:
             df.columns = [c.strip() for c in df.columns]
-            # Normalizar nombres comunes si difieren en las mayúsculas o tildes
             if 'Fecha Registro' in df.columns:
                 df['Fecha Registro'] = pd.to_datetime(df['Fecha Registro'], errors='coerce')
         return df
@@ -169,7 +183,7 @@ def save_data(data_dict):
         row = [
             ts, user, data_dict["nombre"], data_dict["cedula"], data_dict["telefono"],
             data_dict["ocupacion"], data_dict["direccion"], data_dict["barrio"], 
-            data_dict["comuna"], data_dict.get("puesto", "")
+            data_dict["comuna"], data_dict.get("novedades", "")
         ]
         sh.sheet1.append_row(row)
         return True
@@ -177,12 +191,9 @@ def save_data(data_dict):
 
 # --- 5. LÓGICA DE AUTENTICACIÓN ---
 def check_auth():
-    if "logged_in" not in st.session_state: 
-        st.session_state.logged_in = False
-    if "user_name" not in st.session_state: 
-        st.session_state.user_name = "Anónimo"
-    if "is_guest" not in st.session_state: 
-        st.session_state.is_guest = False
+    if "logged_in" not in st.session_state: st.session_state.logged_in = False
+    if "user_name" not in st.session_state: st.session_state.user_name = "Anónimo"
+    if "is_guest" not in st.session_state: st.session_state.is_guest = False
     
     params = st.query_params
     if "ref" in params and "ref_checked" not in st.session_state:
@@ -219,25 +230,22 @@ def view_registro():
             nom = st.text_input("Nombre Completo")
             ced = st.text_input("Cédula")
             tel = st.text_input("Teléfono")
-        with c2:
             ocu = st.text_input("Ocupación")
+        with c2:
             dir = st.text_input("Dirección")
             bar = st.text_input("Barrio")
-        
-        comuna = st.selectbox("Comuna", [
-            "Comuna 1 (Centro)", "Comuna 2 (Atahualpa)", "Comuna 3 (El Ejido)", 
-            "Comuna 4 (Lorenzo)", "Comuna 5 (Potrerillo)", "Comuna 6 (Tamasagra)", 
-            "Comuna 7 (Pandiaco)", "Comuna 8 (San Pedro)", "Comuna 9 (Morasurco)", 
-            "Comuna 10 (Aranda)", "Comuna 11 (La Carolina)", "Comuna 12 (Suroriental)"
-        ])
-        pue = st.text_input("Puesto de Votación (Opcional)")
+            comuna = st.selectbox("Comuna", [
+                "Comuna 1", "Comuna 2", "Comuna 3", "Comuna 4", "Comuna 5", "Comuna 6", 
+                "Comuna 7", "Comuna 8", "Comuna 9", "Comuna 10", "Comuna 11", "Comuna 12"
+            ])
+            nov = st.selectbox("Novedades", ["", "Cedula no existe", "Cedula no vota", "Ciudadano repetido"])
         
         if st.form_submit_button("GUARDAR REGISTRO"):
             if nom and ced and tel:
                 success = save_data({
                     "nombre": nom.upper(), "cedula": ced, "telefono": tel,
                     "ocupacion": ocu.upper(), "direccion": dir.upper(),
-                    "barrio": bar.upper(), "comuna": comuna.upper(), "puesto": pue.upper()
+                    "barrio": bar.upper(), "comuna": comuna.upper(), "novedades": nov
                 })
                 if success:
                     st.success("¡Registro guardado exitosamente!")
@@ -284,7 +292,7 @@ def view_estadisticas():
     else:
         v_hoy, v_8d, v_30d = 0, 0, 0
 
-    col_comuna_name = 'Comuna' if 'Comuna' in df.columns else ('Ciudad' if 'Ciudad' in df.columns else None)
+    col_comuna_name = 'comuna' if 'comuna' in df.columns else ('Comuna' if 'Comuna' in df.columns else None)
     num_comunas = df[col_comuna_name].nunique() if col_comuna_name else 0
 
     k1, k2, k3, k4 = st.columns(4)
@@ -292,45 +300,66 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA DE CALOR E INTEGRACIÓN DE COMUNAS ---
+    # --- MAPA DE CALOR INTERACTIVO CON FOLIUM ---
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📍 Mapa de Calor y Comunas de Pasto")
+    st.subheader("📍 Mapa de Calor - Comunas de Pasto")
     
-    m_df = df.copy()
-    if col_comuna_name:
-        m_df['ID_COMUNA'] = m_df[col_comuna_name].apply(normalizar_para_mapa).apply(normalizar)
-        counts = m_df['ID_COMUNA'].value_counts().reset_index()
-        counts.columns = ['ID_COMUNA', 'Registros']
-    else:
-        counts = pd.DataFrame(columns=['ID_COMUNA', 'Registros'])
-
     c_map_view, c_map_stats = st.columns([5, 1])
     
     with c_map_view:
-        st.info("💡 Distribución de registros por comuna en San Juan de Pasto.")
-        if not counts.empty:
-            fig_bar = px.bar(counts, x='ID_COMUNA', y='Registros', color='Registros',
-                             color_continuous_scale=[[0, '#FCE4EC'], [1, '#E91E63']],
-                             title="Concentración de Registros por Comuna")
-            fig_bar.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=400)
-            st.plotly_chart(fig_bar, use_container_width=True)
-        else:
-            st.warning("No hay datos suficientes para graficar las comunas.")
+        # Crear mapa centrado en San Juan de Pasto
+        pasto_coords = [1.2136, -77.2811]
+        m = folium.Map(location=pasto_coords, zoom_start=13, tiles="CartoDB positron")
+
+        if col_comuna_name and not df.empty:
+            m_df = df.copy()
+            m_df['ID_COMUNA'] = m_df[col_comuna_name].apply(normalizar_para_mapa).apply(normalizar)
+            
+            # Preparar datos de calor basados en las frecuencias por comuna
+            heat_data = []
+            for comuna, count in m_df['ID_COMUNA'].value_counts().items():
+                if comuna in COORDS_COMUNAS:
+                    lat, lon = COORDS_COMUNAS[comuna]
+                    # Añadir puntos repetidos proporcionalmente a la cantidad de registros
+                    for _ in range(min(int(count), 100)): 
+                        heat_data.append([lat, lon, float(count)])
+
+            if heat_data:
+                HeatMap(heat_data, radius=25, blur=15, max_zoom=18).add_to(m)
+
+            # Añadir marcadores por comuna
+            counts = m_df['ID_COMUNA'].value_counts()
+            for comuna, count in counts.items():
+                if comuna in COORDS_COMUNAS:
+                    lat, lon = COORDS_COMUNAS[comuna]
+                    folium.CircleMarker(
+                        location=[lat, lon],
+                        radius=8,
+                        popup=f"<b>{comuna}</b><br>Registros: {count}",
+                        color="#E91E63",
+                        fill=True,
+                        fill_color="#E91E63",
+                        fill_opacity=0.7
+                    ).add_to(m)
+
+        st_folium(m, width="100%", height=450)
 
     with c_map_stats:
         st.write("**🔥 Ranking Comunas**")
-        if not counts.empty:
-            for _, row in counts.head(12).iterrows():
+        if col_comuna_name:
+            counts_df = df[col_comuna_name].value_counts().reset_index()
+            counts_df.columns = ['Comuna', 'Registros']
+            for _, row in counts_df.head(12).iterrows():
                 st.markdown(f"""
                     <div class="rank-item" style="padding:8px; margin-bottom:6px; border-radius:12px;">
-                        <span style="font-weight:600; font-size:0.75rem;">{row['ID_COMUNA']}</span>
+                        <span style="font-weight:600; font-size:0.75rem;">{str(row['Comuna']).upper()}</span>
                         <span class="hotspot-pill" style="font-size:0.7rem; padding:2px 8px;">{row['Registros']}</span>
                     </div>
                 """, unsafe_allow_html=True)
         st.markdown("---")
         st.metric("Comunas", f"{num_comunas}/12")
 
-    # --- LEADERBOARD ---
+    # --- LEADERBOARD & TENDENCIA ---
     st.markdown("---")
     c_rank, c_trend = st.columns([1, 1.5])
     
@@ -350,8 +379,6 @@ def view_estadisticas():
                         <span class="rank-badge">{row['Total']} regs</span>
                     </div>
                 """, unsafe_allow_html=True)
-        else:
-            st.info("Columna de líder o usuario no encontrada.")
 
     with c_trend:
         st.subheader("📈 Actividad Histórica")
@@ -360,8 +387,6 @@ def view_estadisticas():
             fig_trend = px.area(trend, x='F_S', y='Ingresos', color_discrete_sequence=['#E91E63'])
             fig_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=380, xaxis_title=None, yaxis_title=None)
             st.plotly_chart(fig_trend, use_container_width=True)
-        else:
-            st.info("No hay suficientes registros con fecha válida para mostrar la tendencia.")
 
 def view_busqueda():
     st.title("🔍 Explorador de Registros")
