@@ -301,7 +301,7 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- INDICADORES NUEVOS: TOP COMUNAS (MÁS Y MENOS) ---
+    # --- GRÁFICOS DE BARRAS: TOP 5 MÁS Y TOP 7 MENOS COMUNAS ---
     st.markdown("<br>", unsafe_allow_html=True)
     if col_comuna_name:
         df['ID_COMUNA'] = df[col_comuna_name].apply(normalizar_para_mapa).apply(normalizar)
@@ -312,66 +312,51 @@ def view_estadisticas():
         with tc1:
             st.subheader("📈 Top 5 Comunas con Más Votos")
             top_5 = conteo_comunas.head(5)
-            for i, row in top_5.iterrows():
-                st.markdown(f"""
-                    <div class="rank-item">
-                        <div style="display:flex; align-items:center;">
-                            <div class="rank-num">{i+1}</div>
-                            <span class="rank-name">{row['Comuna']}</span>
-                        </div>
-                        <span class="rank-badge" style="color:#059669; background:#ECFDF5; border-color:#A7F3D0;">{row['Registros']} regs</span>
-                    </div>
-                """, unsafe_allow_html=True)
+            fig_top5 = px.bar(
+                top_5, x='Comuna', y='Registros', text='Registros',
+                color='Registros', color_continuous_scale='Greens'
+            )
+            fig_top5.update_traces(textposition='outside')
+            fig_top5.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=320, xaxis_title=None, yaxis_title=None, coloraxis_showscale=False)
+            st.plotly_chart(fig_top5, use_container_width=True)
 
         with tc2:
             st.subheader("📉 Top 7 Comunas con Menos Votos")
             bottom_7 = conteo_comunas.tail(7).sort_values(by='Registros', ascending=True)
-            for i, row in bottom_7.iterrows():
-                st.markdown(f"""
-                    <div class="rank-item">
-                        <div style="display:flex; align-items:center;">
-                            <div class="rank-num" style="background:#FEF2F2; color:#DC2626;">!</div>
-                            <span class="rank-name">{row['Comuna']}</span>
-                        </div>
-                        <span class="rank-badge" style="color:#DC2626; background:#FEF2F2; border-color:#FECACA;">{row['Registros']} regs</span>
-                    </div>
-                """, unsafe_allow_html=True)
+            fig_bot7 = px.bar(
+                bottom_7, x='Comuna', y='Registros', text='Registros',
+                color='Registros', color_continuous_scale='Reds'
+            )
+            fig_bot7.update_traces(textposition='outside')
+            fig_bot7.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=320, xaxis_title=None, yaxis_title=None, coloraxis_showscale=False)
+            st.plotly_chart(fig_bot7, use_container_width=True)
 
-    # --- GRÁFICO COMPARATIVO DE NOVEDADES VS VOTOS EFECTIVOS ---
+    # --- GRÁFICO DE TORTA: VOTOS EFECTIVOS VS NOVEDADES ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("⚖️ Comparativa: Votos Efectivos vs. Novedades Encontradas")
     
     col_novedad = 'Novedades' if 'Novedades' in df.columns else ('novedades' if 'novedades' in df.columns else None)
     if col_novedad:
-        # Limpiar y categorizar novedades
         df['Estado_Voto'] = df[col_novedad].apply(lambda x: 'Votos Efectivos (Sin Novedad)' if not str(x).strip() or str(x).lower() == 'nan' else str(x).strip())
         resumen_nov = df['Estado_Voto'].value_counts().reset_index()
         resumen_nov.columns = ['Categoría', 'Cantidad']
 
-        # Gráfico de barras comparativo
-        fig_nov = px.bar(
+        fig_pie = px.pie(
             resumen_nov, 
-            x='Categoría', 
-            y='Cantidad', 
+            names='Categoría', 
+            values='Cantidad', 
+            hole=0.4,
             color='Categoría',
             color_discrete_map={
                 'Votos Efectivos (Sin Novedad)': '#059669',
                 'Cedula no existe': '#EF4444',
                 'Cedula no vota': '#F59E0B',
                 'Ciudadano repetido': '#6366F1'
-            },
-            text='Cantidad'
+            }
         )
-        fig_nov.update_traces(textposition='outside')
-        fig_nov.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)', 
-            paper_bgcolor='rgba(0,0,0,0)', 
-            height=400,
-            xaxis_title=None,
-            yaxis_title="Total Registros",
-            showlegend=False
-        )
-        st.plotly_chart(fig_nov, use_container_width=True)
+        fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+        fig_pie.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=400)
+        st.plotly_chart(fig_pie, use_container_width=True)
     else:
         st.info("Columna de 'Novedades' no detectada en el DataFrame.")
 
@@ -414,7 +399,7 @@ def view_estadisticas():
     with c_map_stats:
         st.write("**🔥 Resumen Comunas**")
         if col_comuna_name:
-            for _, row in conteo_comunas.head(12).iterrows():
+            for _, row in conteo_comunas.iterrows():
                 st.markdown(f"""
                     <div class="rank-item" style="padding:8px; margin-bottom:6px; border-radius:12px;">
                         <span style="font-weight:600; font-size:0.75rem;">{str(row['Comuna']).upper()}</span>
