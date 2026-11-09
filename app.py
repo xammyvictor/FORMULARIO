@@ -307,9 +307,9 @@ def view_estadisticas():
     c_map_view, c_map_stats = st.columns([5, 1])
     
     with c_map_view:
-        # Crear mapa centrado en San Juan de Pasto
+        # Mapa centrado en San Juan de Pasto con OpenStreetMap limpio
         pasto_coords = [1.2136, -77.2811]
-        m = folium.Map(location=pasto_coords, zoom_start=13, tiles="CartoDB positron")
+        m = folium.Map(location=pasto_coords, zoom_start=13, tiles="OpenStreetMap")
 
         if col_comuna_name and not df.empty:
             m_df = df.copy()
@@ -320,7 +320,6 @@ def view_estadisticas():
             for comuna, count in m_df['ID_COMUNA'].value_counts().items():
                 if comuna in COORDS_COMUNAS:
                     lat, lon = COORDS_COMUNAS[comuna]
-                    # Añadir puntos repetidos proporcionalmente a la cantidad de registros
                     for _ in range(min(int(count), 100)): 
                         heat_data.append([lat, lon, float(count)])
 
