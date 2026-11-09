@@ -12,8 +12,7 @@ import json
 import numpy as np
 
 # --- 1. CONFIGURACIÓN Y CONSTANTES ---
-# URL del GeoJSON de Pasto por comunas (o puedes usar un GeoJSON oficial de las comunas de Pasto)
-URL_GITHUB_GEO = "https://raw.githubusercontent.com/johndoe/pasto-comunas/main/comunas_pasto.geojson" # Cambiar por tu repositorio con el geojson de comunas de Pasto
+URL_GITHUB_GEO = "https://raw.githubusercontent.com/johndoe/pasto-comunas/main/comunas_pasto.geojson"
 META_REGISTROS = 12000
 USUARIOS_ADMIN = ["fabian", "xammy", "brayan"]
 COMUNAS_PASTO_TOTAL = 12
@@ -37,7 +36,6 @@ def normalizar(texto):
 def normalizar_para_mapa(comuna):
     """Mapea nombres de entrada a la identificación oficial de las comunas de Pasto."""
     c = normalizar(comuna)
-    # Ejemplo de normalización para asegurar que coincida con el GeoJSON de comunas
     mapping = {
         "CENTRO": "COMUNA 1",
         "COMUNA 1": "COMUNA 1",
@@ -217,7 +215,7 @@ def check_auth():
                     st.session_state.logged_in = True
                     st.session_state.user_name = u.lower()
                     st.session_state.is_guest = False
-                    st.session_state.rerun()
+                    st.rerun()
                 else: st.error("Acceso Denegado")
         return False
     return True
@@ -312,11 +310,7 @@ def view_estadisticas():
     c_map_view, c_map_stats = st.columns([5, 1])
     
     with c_map_view:
-        # Aquí puedes incrustar el mapa Leaflet interactivo mediante componentes HTML de Streamlit si prefieres el mapa de calor real, 
-        # o usar Plotly si manejas las coordenadas centrales de las comunas.
-        st.info("💡 Aquí puedes integrar tu componente Leaflet de mapa de calor por comunas para Pasto.")
-        
-        # Opcional: Gráfico de barras de densidad por comunas simulando el mapa de calor visual
+        st.info("💡 Distribución de registros por comuna en San Juan de Pasto.")
         fig_bar = px.bar(counts, x='ID_COMUNA', y='Registros', color='Registros',
                          color_continuous_scale=[[0, '#FCE4EC'], [1, '#E91E63']],
                          title="Concentración de Registros por Comuna")
