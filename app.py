@@ -16,7 +16,7 @@ from streamlit_folium import st_folium
 
 # --- 1. CONFIGURACIÓN Y CONSTANTES ---
 META_REGISTROS = 4000
-USUARIOS_ADMIN = ["fabian", "xammy", "brayan"]
+USUARIOS_ADMIN = ["ALEXANDER"]
 
 st.set_page_config(
     page_title="Pulse Analytics - Pasto",
@@ -219,7 +219,7 @@ def check_auth():
             u = st.text_input("Usuario")
             p = st.text_input("Contraseña", type="password")
             if st.button("Acceder al Panel"):
-                creds = {"fabian": "1234", "xammy": "1234", "brayan": "1234", "diegomonta": "1234", "diveincalero": "1234"}
+                creds = {"DIEGO": "1234", "ALEXANDER": "1234", "JOSE": "1234", "ARTURO": "1234", "ANDRES": "1234"}
                 if u.lower() in creds and creds[u.lower()] == p:
                     st.session_state.logged_in = True
                     st.session_state.user_name = u.lower()
