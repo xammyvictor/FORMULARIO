@@ -146,7 +146,7 @@ def apply_custom_styles():
         </style>
     """, unsafe_allow_html=True)
 
-# --- 4. CONEXIÓN A DATOS ---
+# --- 4. CONEXIÓN A DATOS CON CACHÉ ---
 @st.cache_resource
 def get_google_sheet_client():
     try:
@@ -158,6 +158,7 @@ def get_google_sheet_client():
         return gspread.authorize(creds)
     except Exception: return None
 
+@st.cache_data(ttl=60) # Caché de 1 minuto para evitar llamadas lentas constantes a Google Sheets
 def get_data():
     client = get_google_sheet_client()
     if not client: return pd.DataFrame()
@@ -170,7 +171,6 @@ def get_data():
                 df['Fecha Registro'] = pd.to_datetime(df['Fecha Registro'], errors='coerce')
         return df
     except Exception as e:
-        st.error(f"Error al conectar con Google Sheets: {e}")
         return pd.DataFrame()
 
 def save_data(data_dict):
@@ -186,6 +186,7 @@ def save_data(data_dict):
             data_dict["comuna"], data_dict.get("novedades", "")
         ]
         sh.sheet1.append_row(row)
+        st.cache_data.clear() # Limpiar caché para reflejar el nuevo registro de inmediato
         return True
     except Exception: return False
 
@@ -300,48 +301,46 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA DE CALOR INTERACTIVO CON FOLIUM ---
+    # --- MAPA DE CALOR OPTIMIZADO ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📍 Mapa de Calor - Comunas de Pasto")
     
     c_map_view, c_map_stats = st.columns([5, 1])
     
     with c_map_view:
-        # Mapa centrado en San Juan de Pasto con OpenStreetMap limpio
+        # Cargar mapa ligero optimizado
         pasto_coords = [1.2136, -77.2811]
-        m = folium.Map(location=pasto_coords, zoom_start=13, tiles="OpenStreetMap")
+        m = folium.Map(location=pasto_coords, zoom_start=13, tiles="OpenStreetMap", prefer_canvas=True)
 
         if col_comuna_name and not df.empty:
             m_df = df.copy()
             m_df['ID_COMUNA'] = m_df[col_comuna_name].apply(normalizar_para_mapa).apply(normalizar)
+            conteo_comunas = m_df['ID_COMUNA'].value_counts()
             
-            # Preparar datos de calor basados en las frecuencias por comuna
             heat_data = []
-            for comuna, count in m_df['ID_COMUNA'].value_counts().items():
+            for comuna, count in conteo_comunas.items():
                 if comuna in COORDS_COMUNAS:
                     lat, lon = COORDS_COMUNAS[comuna]
-                    for _ in range(min(int(count), 100)): 
-                        heat_data.append([lat, lon, float(count)])
+                    # Agrupamos la intensidad para renderizado fluido sin congelar la app
+                    heat_data.append([lat, lon, float(count)])
 
             if heat_data:
-                HeatMap(heat_data, radius=25, blur=15, max_zoom=18).add_to(m)
+                HeatMap(heat_data, radius=30, blur=20, max_zoom=18, min_opacity=0.4).add_to(m)
 
-            # Añadir marcadores por comuna
-            counts = m_df['ID_COMUNA'].value_counts()
-            for comuna, count in counts.items():
+            for comuna, count in conteo_comunas.items():
                 if comuna in COORDS_COMUNAS:
                     lat, lon = COORDS_COMUNAS[comuna]
                     folium.CircleMarker(
                         location=[lat, lon],
-                        radius=8,
+                        radius=6,
                         popup=f"<b>{comuna}</b><br>Registros: {count}",
                         color="#E91E63",
                         fill=True,
                         fill_color="#E91E63",
-                        fill_opacity=0.7
+                        fill_opacity=0.8
                     ).add_to(m)
 
-        st_folium(m, width="100%", height=450)
+        st_folium(m, width="100%", height=450, returned_objects=[])
 
     with c_map_stats:
         st.write("**🔥 Ranking Comunas**")
