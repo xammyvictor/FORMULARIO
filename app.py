@@ -146,7 +146,7 @@ def apply_custom_styles():
         </style>
     """, unsafe_allow_html=True)
 
-# --- 4. CONEXIÓN A DATOS CON CACHÉ ---
+# --- 4. CONEXIÓN A DATOS CON CACHÉ Y DEPURACIÓN ---
 @st.cache_resource
 def get_google_sheet_client():
     try:
@@ -161,16 +161,25 @@ def get_google_sheet_client():
 @st.cache_data(ttl=60)
 def get_data():
     client = get_google_sheet_client()
-    if not client: return pd.DataFrame()
+    if not client: 
+        st.error("⚠️ No se pudo inicializar el cliente de Google Sheets (Revisa tus st.secrets).")
+        return pd.DataFrame()
     try:
         sh = client.open("Base_Datos_Ciudadanos")
-        df = pd.DataFrame(sh.sheet1.get_all_records())
+        worksheet = sh.get_worksheet(0)
+        data = worksheet.get_all_records()
+        
+        if not data:
+            return pd.DataFrame()
+            
+        df = pd.DataFrame(data)
         if not df.empty:
             df.columns = [c.strip() for c in df.columns]
             if 'Fecha Registro' in df.columns:
                 df['Fecha Registro'] = pd.to_datetime(df['Fecha Registro'], errors='coerce')
         return df
-    except Exception:
+    except Exception as e:
+        st.error(f"❌ Error al conectar con Google Sheets: {e}")
         return pd.DataFrame()
 
 def save_data(data_dict):
@@ -301,7 +310,7 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- GRÁFICOS DE BARRAS: TOP 5 MÁS Y TOP 7 MENOS COMUNAS (ETIQUETAS Y MÁRGENES CORREGIDOS) ---
+    # --- GRÁFICOS DE BARRAS: TOP 5 MÁS Y TOP 7 MENOS COMUNAS (MÁRGENES Y ETIQUETAS CORREGIDOS) ---
     st.markdown("<br>", unsafe_allow_html=True)
     if col_comuna_name:
         df['ID_COMUNA'] = df[col_comuna_name].apply(normalizar_para_mapa).apply(normalizar)
@@ -316,7 +325,6 @@ def view_estadisticas():
                 top_5, x='Comuna', y='Registros', text='Registros',
                 color='Registros', color_continuous_scale=['#BAE6FD', '#0284C7', '#0F172A']
             )
-            # Etiquetas arriba de la barra con margen superior ampliado para que nunca se corten
             fig_top5.update_traces(textposition='outside', textfont=dict(size=12, color='#0F172A', family='Plus Jakarta Sans'))
             fig_top5.update_layout(
                 plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', 
@@ -344,7 +352,7 @@ def view_estadisticas():
             )
             st.plotly_chart(fig_bot7, use_container_width=True)
 
-    # --- GRÁFICO DE TORTA: VOTOS EFECTIVOS VS NOVEDADES (PALETA AZUL / ACENTOS) ---
+    # --- GRÁFICO DE TORTA: VOTOS EFECTIVOS VS NOVEDADES ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("⚖️ Comparativa: Votos Efectivos vs. Novedades Encontradas")
     
@@ -361,10 +369,10 @@ def view_estadisticas():
             hole=0.45,
             color='Categoría',
             color_discrete_map={
-                'Votos Efectivos (Sin Novedad)': '#0284C7',  # Azul principal
-                'Cedula no existe': '#94A3B8',               # Gris pizarra
-                'Cedula no vota': '#38BDF8',                 # Celeste brillante
-                'Ciudadano repetido': '#1E3A8A'              # Azul marino oscuro
+                'Votos Efectivos (Sin Novedad)': '#0284C7',
+                'Cedula no existe': '#94A3B8',
+                'Cedula no vota': '#38BDF8',
+                'Ciudadano repetido': '#1E3A8A'
             }
         )
         fig_pie.update_traces(textinfo='value', textposition='outside', textfont=dict(size=13, color='#0F172A', family='Plus Jakarta Sans'))
@@ -379,7 +387,7 @@ def view_estadisticas():
     else:
         st.info("Columna de 'Novedades' no detectada en el DataFrame.")
 
-    # --- NUEVO GRÁFICO: LÍDERES VS NOVEDADES ---
+    # --- GRÁFICO: LÍDERES VS NOVEDADES ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("👥 Análisis de Novedades por Líder")
     
