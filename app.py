@@ -37,30 +37,18 @@ def normalizar_para_mapa(comuna):
     """Mapea nombres de entrada a la identificación oficial de las comunas de Pasto."""
     c = normalizar(comuna)
     mapping = {
-        "CENTRO": "COMUNA 1",
-        "COMUNA 1": "COMUNA 1",
-        "ATAHUALPA": "COMUNA 2",
-        "COMUNA 2": "COMUNA 2",
-        "EL EJIDO": "COMUNA 3",
-        "COMUNA 3": "COMUNA 3",
-        "LORENZO": "COMUNA 4",
-        "COMUNA 4": "COMUNA 4",
-        "POTRERILLO": "COMUNA 5",
-        "COMUNA 5": "COMUNA 5",
-        "TAMASAGRA": "COMUNA 6",
-        "COMUNA 6": "COMUNA 6",
-        "PANDIACO": "COMUNA 7",
-        "COMUNA 7": "COMUNA 7",
-        "SAN PEDRO": "COMUNA 8",
-        "COMUNA 8": "COMUNA 8",
-        "MORASURCO": "COMUNA 9",
-        "COMUNA 9": "COMUNA 9",
-        "ARANDA": "COMUNA 10",
-        "COMUNA 10": "COMUNA 10",
-        "LA CAROLINA": "COMUNA 11",
-        "COMUNA 11": "COMUNA 11",
-        "SURORIENTAL": "COMUNA 12",
-        "COMUNA 12": "COMUNA 12"
+        "CENTRO": "COMUNA 1", "COMUNA 1": "COMUNA 1",
+        "ATAHUALPA": "COMUNA 2", "COMUNA 2": "COMUNA 2",
+        "EL EJIDO": "COMUNA 3", "COMUNA 3": "COMUNA 3",
+        "LORENZO": "COMUNA 4", "COMUNA 4": "COMUNA 4",
+        "POTRERILLO": "COMUNA 5", "COMUNA 5": "COMUNA 5",
+        "TAMASAGRA": "COMUNA 6", "COMUNA 6": "COMUNA 6",
+        "PANDIACO": "COMUNA 7", "COMUNA 7": "COMUNA 7",
+        "SAN PEDRO": "COMUNA 8", "COMUNA 8": "COMUNA 8",
+        "MORASURCO": "COMUNA 9", "COMUNA 9": "COMUNA 9",
+        "ARANDA": "COMUNA 10", "COMUNA 10": "COMUNA 10",
+        "LA CAROLINA": "COMUNA 11", "COMUNA 11": "COMUNA 11",
+        "SURORIENTAL": "COMUNA 12", "COMUNA 12": "COMUNA 12"
     }
     return mapping.get(c, c)
 
@@ -145,31 +133,37 @@ def apply_custom_styles():
 @st.cache_resource
 def get_google_sheet_client():
     try:
-        if "gcp_service_account" not in st.secrets: return None
+        if "gcp_service_account" not in st.secrets: 
+            st.error("Faltan las credenciales 'gcp_service_account' en st.secrets.")
+            return None
         creds = Credentials.from_service_account_info(
             st.secrets["gcp_service_account"], 
             scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         )
         return gspread.authorize(creds)
-    except Exception: return None
+    except Exception as e:
+        st.error(f"Error de autorización con Google: {e}")
+        return None
 
 def get_data():
     client = get_google_sheet_client()
     if not client: return pd.DataFrame()
     try:
-        sh = client.open("Base_Datos_Ciudadanos_Pasto")
+        sh = client.open("Base_Datos_Ciudadanos")
         df = pd.DataFrame(sh.sheet1.get_all_records())
         if not df.empty:
             df['Fecha Registro'] = pd.to_datetime(df['Fecha Registro'], errors='coerce')
             df.columns = [c.strip() for c in df.columns]
         return df
-    except Exception: return pd.DataFrame()
+    except Exception as e:
+        st.error(f"No se pudo abrir la hoja de cálculo 'Base_Datos_Ciudadanos'. Error: {e}")
+        return pd.DataFrame()
 
 def save_data(data_dict):
     client = get_google_sheet_client()
     if not client: return False
     try:
-        sh = client.open("Base_Datos_Ciudadanos_Pasto")
+        sh = client.open("Base_Datos_Ciudadanos")
         ts = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
         user = st.session_state.get("user_name", "Anónimo")
         row = [
@@ -180,17 +174,6 @@ def save_data(data_dict):
         sh.sheet1.append_row(row)
         return True
     except Exception: return False
-
-@st.cache_data(ttl=3600)
-def get_pasto_geojson(url):
-    """Descarga el GeoJSON de las comunas de Pasto."""
-    try:
-        response = requests.get(url, timeout=15)
-        if response.status_code == 200:
-            return response.json()
-    except Exception as e:
-        st.error(f"Error cargando GeoJSON de Pasto: {e}")
-    return None
 
 # --- 5. LÓGICA DE AUTENTICACIÓN ---
 def check_auth():
@@ -267,7 +250,7 @@ def view_registro():
 def view_estadisticas():
     df = get_data()
     if df.empty:
-        st.info("Cargando base de datos...")
+        st.warning("⚠️ La base de datos está vacía o no se pudo conectar con Google Sheets.")
         return
 
     st.title("Pulse Analytics | San Juan de Pasto")
