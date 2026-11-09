@@ -219,7 +219,7 @@ def check_auth():
             u = st.text_input("Usuario")
             p = st.text_input("Contraseña", type="password")
             if st.button("Acceder al Panel"):
-                creds = {"DIEGO": "1234", "alexander": "1234", "JOSE": "1234", "ARTURO": "1234", "ANDRES": "1234"}
+                creds = {"diego": "1234", "alexander": "1234", "jose": "1234", "arturo": "1234", "andres": "1234"}
                 if u.lower() in creds and creds[u.lower()] == p:
                     st.session_state.logged_in = True
                     st.session_state.user_name = u.lower()
