@@ -15,11 +15,11 @@ from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 
 # --- 1. CONFIGURACIÓN Y CONSTANTES ---
-META_REGISTROS = 12000
+META_REGISTROS = 6000
 USUARIOS_ADMIN = ["fabian", "xammy", "brayan"]
 
 st.set_page_config(
-    page_title="Maria Irma | Pulse Analytics - Pasto",
+    page_title="Pulse Analytics - Pasto",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
