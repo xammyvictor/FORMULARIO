@@ -69,13 +69,13 @@ COORDS_COMUNAS = {
     "COMUNA 12": [1.1850, -77.2800]
 }
 
-# --- 3. ESTILOS VISUALES ---
+# --- 3. ESTILOS VISUALES (PALETA AZUL EJECUTIVA) ---
 def apply_custom_styles():
     st.markdown("""
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
         :root {
-            --pulse-pink: #E91E63;
+            --pulse-primary: #0284C7;
             --pulse-dark: #0F172A;
             --pulse-slate: #64748B;
             --pulse-bg: #F8FAFC;
@@ -84,28 +84,28 @@ def apply_custom_styles():
         .stApp { background-color: var(--pulse-bg); }
         
         .pulse-hero {
-            background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+            background: linear-gradient(135deg, #0F172A 0%, #1E3A8A 100%);
             color: white;
             padding: 40px;
-            border-radius: 32px;
-            margin-bottom: 35px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 24px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15);
+            border: 1px solid rgba(255,255,255,0.08);
         }
-        .hero-label { font-size: 0.8rem; font-weight: 700; opacity: 0.6; letter-spacing: 0.1em; text-transform: uppercase; }
-        .hero-value { font-size: 4rem; font-weight: 800; line-height: 1; margin: 10px 0; color: white !important; }
-        .hero-perc { font-size: 2.5rem; font-weight: 800; color: var(--pulse-pink); }
+        .hero-label { font-size: 0.85rem; font-weight: 700; opacity: 0.75; letter-spacing: 0.1em; text-transform: uppercase; }
+        .hero-value { font-size: 3.8rem; font-weight: 800; line-height: 1; margin: 10px 0; color: white !important; }
+        .hero-perc { font-size: 2.5rem; font-weight: 800; color: #38BDF8; }
         
         .pulse-progress-track {
-            background: rgba(255, 255, 255, 0.1);
-            height: 14px;
+            background: rgba(255, 255, 255, 0.15);
+            height: 12px;
             border-radius: 20px;
             width: 100%;
             margin-top: 25px;
             overflow: hidden;
         }
         .pulse-progress-fill {
-            background: linear-gradient(90deg, #E91E63 0%, #FF80AB 100%);
+            background: linear-gradient(90deg, #0284C7 0%, #38BDF8 100%);
             height: 100%;
             border-radius: 20px;
             transition: width 1s ease;
@@ -114,32 +114,32 @@ def apply_custom_styles():
         .pulse-kpi-card {
             background: white;
             padding: 24px;
-            border-radius: 24px;
-            border: 1px solid #F1F5F9;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+            border-radius: 20px;
+            border: 1px solid #E2E8F0;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
         }
-        .kpi-label { color: var(--pulse-slate); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
-        .kpi-val { color: var(--pulse-dark); font-size: 2.4rem; font-weight: 800; line-height: 1; }
+        .kpi-label { color: var(--pulse-slate); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
+        .kpi-val { color: var(--pulse-dark); font-size: 2.2rem; font-weight: 800; line-height: 1; }
 
         .rank-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 16px;
+            padding: 14px 16px;
             background: white;
-            border-radius: 18px;
-            margin-bottom: 10px;
-            border: 1px solid #F1F5F9;
+            border-radius: 14px;
+            margin-bottom: 8px;
+            border: 1px solid #E2E8F0;
         }
-        .rank-num { width: 32px; height: 32px; background: #FCE4EC; color: var(--pulse-pink); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.8rem; margin-right: 12px; }
-        .rank-name { font-weight: 700; color: #1E293B; }
-        .rank-badge { background: #F8FAFC; color: #64748B; padding: 6px 14px; border-radius: 12px; font-weight: 700; border: 1px solid #E2E8F0; }
+        .rank-num { width: 28px; height: 28px; background: #E0F2FE; color: #0284C7; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.75rem; margin-right: 12px; }
+        .rank-name { font-weight: 700; color: #1E293B; font-size: 0.9rem; }
+        .rank-badge { background: #F0F9FF; color: #0369A1; padding: 4px 12px; border-radius: 10px; font-weight: 700; border: 1px solid #BAE6FD; font-size: 0.8rem; }
 
         .hotspot-pill {
-            padding: 4px 12px;
-            background: #FEF2F2;
-            color: #B91C1C;
-            border-radius: 20px;
+            padding: 4px 10px;
+            background: #F0FDF4;
+            color: #166534;
+            border-radius: 10px;
             font-size: 0.75rem;
             font-weight: 700;
         }
@@ -276,7 +276,7 @@ def view_estadisticas():
                 </div>
                 <div style="text-align:right;">
                     <span class="hero-perc">{perc:.1f}%</span>
-                    <p style="margin:0; opacity:0.6; font-size:0.8rem;">Meta: {META_REGISTROS:,}</p>
+                    <p style="margin:0; opacity:0.75; font-size:0.85rem;">Meta: {META_REGISTROS:,}</p>
                 </div>
             </div>
             <div class="pulse-progress-track"><div class="pulse-progress-fill" style="width: {perc}%;"></div></div>
@@ -301,7 +301,7 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- GRÁFICOS DE BARRAS: TOP 5 MÁS Y TOP 7 MENOS COMUNAS ---
+    # --- GRÁFICOS DE BARRAS: TOP 5 MÁS Y TOP 7 MENOS COMUNAS (ETIQUETAS Y MÁRGENES CORREGIDOS) ---
     st.markdown("<br>", unsafe_allow_html=True)
     if col_comuna_name:
         df['ID_COMUNA'] = df[col_comuna_name].apply(normalizar_para_mapa).apply(normalizar)
@@ -314,10 +314,17 @@ def view_estadisticas():
             top_5 = conteo_comunas.head(5)
             fig_top5 = px.bar(
                 top_5, x='Comuna', y='Registros', text='Registros',
-                color='Registros', color_continuous_scale='Greens'
+                color='Registros', color_continuous_scale=['#BAE6FD', '#0284C7', '#0F172A']
             )
-            fig_top5.update_traces(textposition='outside')
-            fig_top5.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=320, xaxis_title=None, yaxis_title=None, coloraxis_showscale=False)
+            # Etiquetas arriba de la barra con margen superior ampliado para que nunca se corten
+            fig_top5.update_traces(textposition='outside', textfont=dict(size=12, color='#0F172A', family='Plus Jakarta Sans'))
+            fig_top5.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', 
+                height=350, margin=dict(t=40, b=20, l=20, r=20),
+                xaxis=dict(title=None, tickfont=dict(size=11, color='#334155')),
+                yaxis=dict(title=None, showgrid=True, gridcolor='#E2E8F0', range=[0, top_5['Registros'].max() * 1.25]),
+                coloraxis_showscale=False
+            )
             st.plotly_chart(fig_top5, use_container_width=True)
 
         with tc2:
@@ -325,13 +332,19 @@ def view_estadisticas():
             bottom_7 = conteo_comunas.tail(7).sort_values(by='Registros', ascending=True)
             fig_bot7 = px.bar(
                 bottom_7, x='Comuna', y='Registros', text='Registros',
-                color='Registros', color_continuous_scale='Reds'
+                color='Registros', color_continuous_scale=['#93C5FD', '#1E40AF']
             )
-            fig_bot7.update_traces(textposition='outside')
-            fig_bot7.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=320, xaxis_title=None, yaxis_title=None, coloraxis_showscale=False)
+            fig_bot7.update_traces(textposition='outside', textfont=dict(size=12, color='#0F172A', family='Plus Jakarta Sans'))
+            fig_bot7.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', 
+                height=350, margin=dict(t=40, b=20, l=20, r=20),
+                xaxis=dict(title=None, tickfont=dict(size=11, color='#334155')),
+                yaxis=dict(title=None, showgrid=True, gridcolor='#E2E8F0', range=[0, bottom_7['Registros'].max() * 1.25]),
+                coloraxis_showscale=False
+            )
             st.plotly_chart(fig_bot7, use_container_width=True)
 
-    # --- GRÁFICO DE TORTA MEJORADO: VOTOS EFECTIVOS VS NOVEDADES ---
+    # --- GRÁFICO DE TORTA: VOTOS EFECTIVOS VS NOVEDADES (PALETA AZUL / ACENTOS) ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("⚖️ Comparativa: Votos Efectivos vs. Novedades Encontradas")
     
@@ -345,21 +358,22 @@ def view_estadisticas():
             resumen_nov, 
             names='Categoría', 
             values='Cantidad', 
-            hole=0.4,
+            hole=0.45,
             color='Categoría',
             color_discrete_map={
-                'Votos Efectivos (Sin Novedad)': '#059669',
-                'Cedula no existe': '#EF4444',
-                'Cedula no vota': '#F59E0B',
-                'Ciudadano repetido': '#6366F1'
+                'Votos Efectivos (Sin Novedad)': '#0284C7',  # Azul principal
+                'Cedula no existe': '#94A3B8',               # Gris pizarra
+                'Cedula no vota': '#38BDF8',                 # Celeste brillante
+                'Ciudadano repetido': '#1E3A8A'              # Azul marino oscuro
             }
         )
-        fig_pie.update_traces(textinfo='value', textposition='outside')
+        fig_pie.update_traces(textinfo='value', textposition='outside', textfont=dict(size=13, color='#0F172A', family='Plus Jakarta Sans'))
         fig_pie.update_layout(
             plot_bgcolor='rgba(0,0,0,0)', 
             paper_bgcolor='rgba(0,0,0,0)', 
             height=400,
-            legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
+            margin=dict(t=30, b=50, l=20, r=20),
+            legend=dict(orientation="h", yanchor="bottom", y=-0.25, xanchor="center", x=0.5, font=dict(size=12))
         )
         st.plotly_chart(fig_pie, use_container_width=True)
     else:
@@ -371,13 +385,11 @@ def view_estadisticas():
     
     col_lider = 'Registrado Por' if 'Registrado Por' in df.columns else ('Usuario' if 'Usuario' in df.columns else None)
     if col_lider and col_novedad:
-        # Filtramos solo registros que tienen alguna novedad (excluyendo vacíos o sin novedad)
         df_novs = df[df[col_novedad].notna() & (df[col_novedad].astype(str).str.strip() != "")].copy()
         df_novs['Líder'] = df_novs[col_lider].astype(str).str.upper()
         df_novs['Tipo Novedad'] = df_novs[col_novedad].astype(str).str.strip()
 
         if not df_novs.empty:
-            # Agrupamos por líder y tipo de novedad
             lider_nov_counts = df_novs.groupby(['Líder', 'Tipo Novedad']).size().reset_index(name='Cantidad')
             
             fig_lider_nov = px.bar(
@@ -388,19 +400,20 @@ def view_estadisticas():
                 barmode='group',
                 text='Cantidad',
                 color_discrete_map={
-                    'Cedula no existe': '#EF4444',
-                    'Cedula no vota': '#F59E0B',
-                    'Ciudadano repetido': '#6366F1'
+                    'Cedula no existe': '#94A3B8',
+                    'Cedula no vota': '#38BDF8',
+                    'Ciudadano repetido': '#1E3A8A'
                 }
             )
-            fig_lider_nov.update_traces(textposition='outside')
+            fig_lider_nov.update_traces(textposition='outside', textfont=dict(size=11, color='#0F172A'))
             fig_lider_nov.update_layout(
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
                 height=420,
-                xaxis_title=None,
-                yaxis_title="Cantidad de Inconsistencias",
-                legend_title="Tipo de Novedad"
+                margin=dict(t=40, b=20, l=20, r=20),
+                xaxis=dict(title=None, tickfont=dict(size=11, color='#334155')),
+                yaxis=dict(title=None, showgrid=True, gridcolor='#E2E8F0', range=[0, lider_nov_counts['Cantidad'].max() * 1.25]),
+                legend_title=dict(text="Novedad", font=dict(size=11))
             )
             st.plotly_chart(fig_lider_nov, use_container_width=True)
         else:
@@ -436,9 +449,9 @@ def view_estadisticas():
                         location=[lat, lon],
                         radius=6,
                         popup=f"<b>{comuna}</b><br>Registros: {count}",
-                        color="#E91E63",
+                        color="#0284C7",
                         fill=True,
-                        fill_color="#E91E63",
+                        fill_color="#0284C7",
                         fill_opacity=0.8
                     ).add_to(m)
 
@@ -482,7 +495,7 @@ def view_estadisticas():
         st.subheader("📈 Actividad Histórica")
         if 'F_S' in df.columns and not df['F_S'].isna().all():
             trend = df.groupby('F_S').size().reset_index(name='Ingresos')
-            fig_trend = px.area(trend, x='F_S', y='Ingresos', color_discrete_sequence=['#E91E63'])
+            fig_trend = px.area(trend, x='F_S', y='Ingresos', color_discrete_sequence=['#0284C7'])
             fig_trend.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=380, xaxis_title=None, yaxis_title=None)
             st.plotly_chart(fig_trend, use_container_width=True)
 
