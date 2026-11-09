@@ -15,11 +15,11 @@ from folium.plugins import HeatMap
 from streamlit_folium import st_folium
 
 # --- 1. CONFIGURACIÓN Y CONSTANTES ---
-META_REGISTROS = 6000
+META_REGISTROS = 12000
 USUARIOS_ADMIN = ["fabian", "xammy", "brayan"]
 
 st.set_page_config(
-    page_title="Pulse Analytics - Pasto",
+    page_title="Maria Irma | Pulse Analytics - Pasto",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -158,7 +158,7 @@ def get_google_sheet_client():
         return gspread.authorize(creds)
     except Exception: return None
 
-@st.cache_data(ttl=60) # Caché de 1 minuto para evitar llamadas lentas constantes a Google Sheets
+@st.cache_data(ttl=60)
 def get_data():
     client = get_google_sheet_client()
     if not client: return pd.DataFrame()
@@ -170,7 +170,7 @@ def get_data():
             if 'Fecha Registro' in df.columns:
                 df['Fecha Registro'] = pd.to_datetime(df['Fecha Registro'], errors='coerce')
         return df
-    except Exception as e:
+    except Exception:
         return pd.DataFrame()
 
 def save_data(data_dict):
@@ -186,7 +186,7 @@ def save_data(data_dict):
             data_dict["comuna"], data_dict.get("novedades", "")
         ]
         sh.sheet1.append_row(row)
-        st.cache_data.clear() # Limpiar caché para reflejar el nuevo registro de inmediato
+        st.cache_data.clear()
         return True
     except Exception: return False
 
@@ -301,33 +301,102 @@ def view_estadisticas():
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA DE CALOR OPTIMIZADO ---
+    # --- INDICADORES NUEVOS: TOP COMUNAS (MÁS Y MENOS) ---
+    st.markdown("<br>", unsafe_allow_html=True)
+    if col_comuna_name:
+        df['ID_COMUNA'] = df[col_comuna_name].apply(normalizar_para_mapa).apply(normalizar)
+        conteo_comunas = df['ID_COMUNA'].value_counts().reset_index()
+        conteo_comunas.columns = ['Comuna', 'Registros']
+
+        tc1, tc2 = st.columns(2)
+        with tc1:
+            st.subheader("📈 Top 5 Comunas con Más Votos")
+            top_5 = conteo_comunas.head(5)
+            for i, row in top_5.iterrows():
+                st.markdown(f"""
+                    <div class="rank-item">
+                        <div style="display:flex; align-items:center;">
+                            <div class="rank-num">{i+1}</div>
+                            <span class="rank-name">{row['Comuna']}</span>
+                        </div>
+                        <span class="rank-badge" style="color:#059669; background:#ECFDF5; border-color:#A7F3D0;">{row['Registros']} regs</span>
+                    </div>
+                """, unsafe_allow_html=True)
+
+        with tc2:
+            st.subheader("📉 Top 7 Comunas con Menos Votos")
+            bottom_7 = conteo_comunas.tail(7).sort_values(by='Registros', ascending=True)
+            for i, row in bottom_7.iterrows():
+                st.markdown(f"""
+                    <div class="rank-item">
+                        <div style="display:flex; align-items:center;">
+                            <div class="rank-num" style="background:#FEF2F2; color:#DC2626;">!</div>
+                            <span class="rank-name">{row['Comuna']}</span>
+                        </div>
+                        <span class="rank-badge" style="color:#DC2626; background:#FEF2F2; border-color:#FECACA;">{row['Registros']} regs</span>
+                    </div>
+                """, unsafe_allow_html=True)
+
+    # --- GRÁFICO COMPARATIVO DE NOVEDADES VS VOTOS EFECTIVOS ---
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("⚖️ Comparativa: Votos Efectivos vs. Novedades Encontradas")
+    
+    col_novedad = 'Novedades' if 'Novedades' in df.columns else ('novedades' if 'novedades' in df.columns else None)
+    if col_novedad:
+        # Limpiar y categorizar novedades
+        df['Estado_Voto'] = df[col_novedad].apply(lambda x: 'Votos Efectivos (Sin Novedad)' if not str(x).strip() or str(x).lower() == 'nan' else str(x).strip())
+        resumen_nov = df['Estado_Voto'].value_counts().reset_index()
+        resumen_nov.columns = ['Categoría', 'Cantidad']
+
+        # Gráfico de barras comparativo
+        fig_nov = px.bar(
+            resumen_nov, 
+            x='Categoría', 
+            y='Cantidad', 
+            color='Categoría',
+            color_discrete_map={
+                'Votos Efectivos (Sin Novedad)': '#059669',
+                'Cedula no existe': '#EF4444',
+                'Cedula no vota': '#F59E0B',
+                'Ciudadano repetido': '#6366F1'
+            },
+            text='Cantidad'
+        )
+        fig_nov.update_traces(textposition='outside')
+        fig_nov.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)', 
+            paper_bgcolor='rgba(0,0,0,0)', 
+            height=400,
+            xaxis_title=None,
+            yaxis_title="Total Registros",
+            showlegend=False
+        )
+        st.plotly_chart(fig_nov, use_container_width=True)
+    else:
+        st.info("Columna de 'Novedades' no detectada en el DataFrame.")
+
+    # --- MAPA DE CALOR INTERACTIVO CON FOLIUM ---
     st.markdown("<br>", unsafe_allow_html=True)
     st.subheader("📍 Mapa de Calor - Comunas de Pasto")
     
     c_map_view, c_map_stats = st.columns([5, 1])
     
     with c_map_view:
-        # Cargar mapa ligero optimizado
         pasto_coords = [1.2136, -77.2811]
         m = folium.Map(location=pasto_coords, zoom_start=13, tiles="OpenStreetMap", prefer_canvas=True)
 
         if col_comuna_name and not df.empty:
-            m_df = df.copy()
-            m_df['ID_COMUNA'] = m_df[col_comuna_name].apply(normalizar_para_mapa).apply(normalizar)
-            conteo_comunas = m_df['ID_COMUNA'].value_counts()
-            
+            conteo_comunas_map = df['ID_COMUNA'].value_counts()
             heat_data = []
-            for comuna, count in conteo_comunas.items():
+            for comuna, count in conteo_comunas_map.items():
                 if comuna in COORDS_COMUNAS:
                     lat, lon = COORDS_COMUNAS[comuna]
-                    # Agrupamos la intensidad para renderizado fluido sin congelar la app
                     heat_data.append([lat, lon, float(count)])
 
             if heat_data:
                 HeatMap(heat_data, radius=30, blur=20, max_zoom=18, min_opacity=0.4).add_to(m)
 
-            for comuna, count in conteo_comunas.items():
+            for comuna, count in conteo_comunas_map.items():
                 if comuna in COORDS_COMUNAS:
                     lat, lon = COORDS_COMUNAS[comuna]
                     folium.CircleMarker(
@@ -343,11 +412,9 @@ def view_estadisticas():
         st_folium(m, width="100%", height=450, returned_objects=[])
 
     with c_map_stats:
-        st.write("**🔥 Ranking Comunas**")
+        st.write("**🔥 Resumen Comunas**")
         if col_comuna_name:
-            counts_df = df[col_comuna_name].value_counts().reset_index()
-            counts_df.columns = ['Comuna', 'Registros']
-            for _, row in counts_df.head(12).iterrows():
+            for _, row in conteo_comunas.head(12).iterrows():
                 st.markdown(f"""
                     <div class="rank-item" style="padding:8px; margin-bottom:6px; border-radius:12px;">
                         <span style="font-weight:600; font-size:0.75rem;">{str(row['Comuna']).upper()}</span>
@@ -362,7 +429,7 @@ def view_estadisticas():
     c_rank, c_trend = st.columns([1, 1.5])
     
     with c_rank:
-        st.subheader("🏆 Leaderboard de Líderes")
+        st.subheader("🏆 Líderes con Más Votos")
         col_lider = 'Registrado Por' if 'Registrado Por' in df.columns else ('Usuario' if 'Usuario' in df.columns else None)
         if col_lider:
             ranking = df[col_lider].value_counts().reset_index()
