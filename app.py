@@ -12,13 +12,14 @@ import json
 import numpy as np
 
 # --- 1. CONFIGURACIÓN Y CONSTANTES ---
-URL_GITHUB_GEO = "https://github.com/xammyvictor/FORMULARIO/blob/main/co_2018_MGN_MPIO_POLITICO.geojson"
+# URL del GeoJSON de Pasto por comunas (o puedes usar un GeoJSON oficial de las comunas de Pasto)
+URL_GITHUB_GEO = "https://raw.githubusercontent.com/johndoe/pasto-comunas/main/comunas_pasto.geojson" # Cambiar por tu repositorio con el geojson de comunas de Pasto
 META_REGISTROS = 12000
 USUARIOS_ADMIN = ["fabian", "xammy", "brayan"]
-MUNICIPIOS_VALLE_TOTAL = 42
+COMUNAS_PASTO_TOTAL = 12
 
 st.set_page_config(
-    page_title="Maria Irma | Pulse Analytics",
+    page_title="Maria Irma | Pulse Analytics - Pasto",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -33,37 +34,37 @@ def normalizar(texto):
     texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
     return " ".join(texto.split())
 
-def normalizar_para_mapa(muni):
-    """Mapea nombres de entrada a la identificación oficial del DANE."""
-    m = normalizar(muni)
+def normalizar_para_mapa(comuna):
+    """Mapea nombres de entrada a la identificación oficial de las comunas de Pasto."""
+    c = normalizar(comuna)
+    # Ejemplo de normalización para asegurar que coincida con el GeoJSON de comunas
     mapping = {
-        "BUGA": "GUADALAJARA DE BUGA",
-        "JAMUNDI": "JAMUNDI",
-        "TULUA": "TULUA",
-        "GUACARI": "GUACARI",
-        "DARIEN": "CALIMA",
-        "CALIMA": "CALIMA",
-        "LA UNION": "LA UNION",
-        "RIOFRIO": "RIOFRIO",
-        "ANDALUCIA": "ANDALUCIA",
-        "YUMBO": "YUMBO",
-        "PALMIRA": "PALMIRA",
-        "DAGUA": "DAGUA",
-        "CARTAGO": "CARTAGO",
-        "EL CERRITO": "EL CERRITO",
-        "BUGALAGRANDE": "BUGALAGRANDE",
-        "CAICEDONIA": "CAICEDONIA",
-        "FLORIDA": "FLORIDA",
-        "GINEBRA": "GINEBRA",
-        "PRADERA": "PRADERA",
-        "RESTREPO": "RESTREPO",
-        "ROLDANILLO": "ROLDANILLO",
-        "SEVILLA": "SEVILLA",
-        "SANTIAGO DE CALI": "CALI",
-        "CALI": "CALI",
-        "ZARZAL": "ZARZAL"
+        "CENTRO": "COMUNA 1",
+        "COMUNA 1": "COMUNA 1",
+        "ATAHUALPA": "COMUNA 2",
+        "COMUNA 2": "COMUNA 2",
+        "EL EJIDO": "COMUNA 3",
+        "COMUNA 3": "COMUNA 3",
+        "LORENZO": "COMUNA 4",
+        "COMUNA 4": "COMUNA 4",
+        "POTRERILLO": "COMUNA 5",
+        "COMUNA 5": "COMUNA 5",
+        "TAMASAGRA": "COMUNA 6",
+        "COMUNA 6": "COMUNA 6",
+        "PANDIACO": "COMUNA 7",
+        "COMUNA 7": "COMUNA 7",
+        "SAN PEDRO": "COMUNA 8",
+        "COMUNA 8": "COMUNA 8",
+        "MORASURCO": "COMUNA 9",
+        "COMUNA 9": "COMUNA 9",
+        "ARANDA": "COMUNA 10",
+        "COMUNA 10": "COMUNA 10",
+        "LA CAROLINA": "COMUNA 11",
+        "COMUNA 11": "COMUNA 11",
+        "SURORIENTAL": "COMUNA 12",
+        "COMUNA 12": "COMUNA 12"
     }
-    return mapping.get(m, m)
+    return mapping.get(c, c)
 
 # --- 3. ESTILOS VISUALES ---
 def apply_custom_styles():
@@ -158,7 +159,7 @@ def get_data():
     client = get_google_sheet_client()
     if not client: return pd.DataFrame()
     try:
-        sh = client.open("Base_Datos_Ciudadanos")
+        sh = client.open("Base_Datos_Ciudadanos_Pasto")
         df = pd.DataFrame(sh.sheet1.get_all_records())
         if not df.empty:
             df['Fecha Registro'] = pd.to_datetime(df['Fecha Registro'], errors='coerce')
@@ -170,38 +171,27 @@ def save_data(data_dict):
     client = get_google_sheet_client()
     if not client: return False
     try:
-        sh = client.open("Base_Datos_Ciudadanos")
+        sh = client.open("Base_Datos_Ciudadanos_Pasto")
         ts = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S")
         user = st.session_state.get("user_name", "Anónimo")
         row = [
             ts, user, data_dict["nombre"], data_dict["cedula"], data_dict["telefono"],
             data_dict["ocupacion"], data_dict["direccion"], data_dict["barrio"], 
-            data_dict["ciudad"], data_dict.get("puesto", "")
+            data_dict["comuna"], data_dict.get("puesto", "")
         ]
         sh.sheet1.append_row(row)
         return True
     except Exception: return False
 
 @st.cache_data(ttl=3600)
-def get_valle_geojson(url):
-    """Descarga el GeoJSON completo y filtra el Valle del Cauca en tiempo real."""
-    raw_url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
+def get_pasto_geojson(url):
+    """Descarga el GeoJSON de las comunas de Pasto."""
     try:
-        response = requests.get(raw_url, timeout=15)
+        response = requests.get(url, timeout=15)
         if response.status_code == 200:
-            data = response.json()
-            valle_features = []
-            for feature in data["features"]:
-                props = feature["properties"]
-                if str(props.get("DPTO_CCDGO")) == "76":
-                    m_name = normalizar(props.get("MPIO_CNMBR", ""))
-                    feature["id"] = m_name
-                    valle_features.append(feature)
-            
-            if valle_features:
-                return {"type": "FeatureCollection", "features": valle_features}
+            return response.json()
     except Exception as e:
-        st.error(f"Error cargando GeoJSON: {e}")
+        st.error(f"Error cargando GeoJSON de Pasto: {e}")
     return None
 
 # --- 5. LÓGICA DE AUTENTICACIÓN ---
@@ -216,25 +206,25 @@ def check_auth():
         st.session_state.ref_checked = True
 
     if not st.session_state.logged_in:
-        st.markdown("<div style='text-align:center; padding-top: 80px;'><h1>Pulse Analytics</h1><p>Gestión Maria Irma</p></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align:center; padding-top: 80px;'><h1>Pulse Analytics</h1><p>Gestión San Juan de Pasto</p></div>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 1.4, 1])
         with col2:
             u = st.text_input("Usuario")
             p = st.text_input("Contraseña", type="password")
             if st.button("Acceder al Panel"):
-                creds = {"fabian": "1234", "xammy": "1234", "brayan": "1234", "diegomonta": "1234","diveincalero":"1234"}
+                creds = {"fabian": "1234", "xammy": "1234", "brayan": "1234", "diegomonta": "1234", "diveincalero": "1234"}
                 if u.lower() in creds and creds[u.lower()] == p:
                     st.session_state.logged_in = True
                     st.session_state.user_name = u.lower()
                     st.session_state.is_guest = False
-                    st.rerun()
+                    st.session_state.rerun()
                 else: st.error("Acceso Denegado")
         return False
     return True
 
 # --- 6. VISTAS ---
 def view_registro():
-    st.title("🗳️ Nuevo Registro")
+    st.title("🗳️ Nuevo Registro - Pasto")
     if "f_reset" not in st.session_state: st.session_state.f_reset = 0
     
     with st.form(key=f"form_pulse_{st.session_state.f_reset}"):
@@ -247,15 +237,21 @@ def view_registro():
             ocu = st.text_input("Ocupación")
             dir = st.text_input("Dirección")
             bar = st.text_input("Barrio")
-        ciu = st.text_input("Municipio", value="BUGA")
-        pue = st.text_input("Puesto (Opcional)")
+        
+        comuna = st.selectbox("Comuna", [
+            "Comuna 1 (Centro)", "Comuna 2 (Atahualpa)", "Comuna 3 (El Ejido)", 
+            "Comuna 4 (Lorenzo)", "Comuna 5 (Potrerillo)", "Comuna 6 (Tamasagra)", 
+            "Comuna 7 (Pandiaco)", "Comuna 8 (San Pedro)", "Comuna 9 (Morasurco)", 
+            "Comuna 10 (Aranda)", "Comuna 11 (La Carolina)", "Comuna 12 (Suroriental)"
+        ])
+        pue = st.text_input("Puesto de Votación (Opcional)")
         
         if st.form_submit_button("GUARDAR REGISTRO"):
             if nom and ced and tel:
                 success = save_data({
                     "nombre": nom.upper(), "cedula": ced, "telefono": tel,
                     "ocupacion": ocu.upper(), "direccion": dir.upper(),
-                    "barrio": bar.upper(), "ciudad": ciu.upper(), "puesto": pue.upper()
+                    "barrio": bar.upper(), "comuna": comuna.upper(), "puesto": pue.upper()
                 })
                 if success:
                     st.success("¡Registro guardado exitosamente!")
@@ -271,7 +267,7 @@ def view_estadisticas():
         st.info("Cargando base de datos...")
         return
 
-    st.title("Pulse Analytics | Valle del Cauca")
+    st.title("Pulse Analytics | San Juan de Pasto")
     
     # --- HERO ---
     total = len(df)
@@ -280,7 +276,7 @@ def view_estadisticas():
         <div class="pulse-hero">
             <div style="display: flex; justify-content: space-between; align-items: flex-end;">
                 <div>
-                    <p class="hero-label">Progreso de Gestión Global</p>
+                    <p class="hero-label">Progreso de Gestión Global (Pasto)</p>
                     <h1 class="hero-value">{total:,}</h1>
                 </div>
                 <div style="text-align:right;">
@@ -300,110 +296,45 @@ def view_estadisticas():
     v_30d = len(df[df['Fecha Registro'] > (hoy - timedelta(days=30))])
 
     k1, k2, k3, k4 = st.columns(4)
-    metricas = [("Hoy", v_hoy), ("Últ. 8 días", v_8d), ("Últ. 30 días", v_30d), ("Municipios", df['Ciudad'].nunique())]
+    metricas = [("Hoy", v_hoy), ("Últ. 8 días", v_8d), ("Últ. 30 días", v_30d), ("Comunas Activas", df['Comuna'].nunique())]
     for col, (lab, val) in zip([k1, k2, k3, k4], metricas):
         col.markdown(f"""<div class="pulse-kpi-card"><div class="kpi-label">{lab}</div><div class="kpi-val">{val:,}</div></div>""", unsafe_allow_html=True)
 
-    # --- MAPA MAXIMIZADO SIN LÍMITES ---
+    # --- MAPA DE CALOR E INTEGRACIÓN DE COMUNAS ---
     st.markdown("<br>", unsafe_allow_html=True)
-    st.subheader("📍 Visualización Territorial Completa")
+    st.subheader("📍 Mapa de Calor y Comunas de Pasto")
     
     m_df = df.copy()
-    m_df['ID_MPIO'] = m_df['Ciudad'].apply(normalizar_para_mapa).apply(normalizar)
-    counts = m_df['ID_MPIO'].value_counts().reset_index()
-    counts.columns = ['ID_MPIO', 'Registros']
+    m_df['ID_COMUNA'] = m_df['Comuna'].apply(normalizar_para_mapa).apply(normalizar)
+    counts = m_df['ID_COMUNA'].value_counts().reset_index()
+    counts.columns = ['ID_COMUNA', 'Registros']
     
-    # Ajustamos proporciones para eliminar el efecto "encerrado" [5, 1]
     c_map_view, c_map_stats = st.columns([5, 1])
     
     with c_map_view:
-        geojson_data = get_valle_geojson(URL_GITHUB_GEO)
-        if geojson_data:
-            all_features = geojson_data["features"]
-            all_ids = [f["id"] for f in all_features]
-            
-            lats, lons, names = [], [], []
-            for f in all_features:
-                coords = f["geometry"]["coordinates"]
-                if f["geometry"]["type"] == "Polygon":
-                    coords_flat = np.array(coords[0])
-                else: # MultiPolygon
-                    coords_flat = np.array([c for sub in coords for c in sub[0]])
-                
-                lons.append(coords_flat[:, 0].mean())
-                lats.append(coords_flat[:, 1].mean())
-                names.append(f["id"])
-
-            df_base = pd.DataFrame({"ID_MPIO": all_ids})
-            map_data_full = df_base.merge(counts, on='ID_MPIO', how='left').fillna(0)
-            
-            fig = px.choropleth(
-                map_data_full, 
-                geojson=geojson_data, 
-                locations='ID_MPIO',
-                color='Registros',
-                color_continuous_scale=[[0, 'white'], [0.0001, '#FCE4EC'], [1, '#E91E63']],
-                labels={'Registros': 'Total'}
-            )
-            
-            # Etiquetas más visibles
-            fig.add_trace(go.Scattergeo(
-                lat=lats,
-                lon=lons,
-                text=names,
-                mode='text',
-                textfont=dict(size=11, color="black", family="Plus Jakarta Sans", weight="bold"),
-                hoverinfo='none',
-                showlegend=False
-            ))
-            
-            # Forzamos que el mapa use todo el canvas sin bordes internos
-            fig.update_geos(
-                fitbounds="locations",
-                visible=False,
-                projection_type="mercator"
-            )
-            
-            fig.update_traces(
-                marker_line_width=1.8,
-                marker_line_color="black",
-                selector=dict(type='choropleth')
-            )
-            
-            # Altura al máximo y márgenes a cero absoluto
-            fig.update_layout(
-                margin={"r":0,"t":0,"l":0,"b":0}, 
-                height=1000,
-                paper_bgcolor="white",
-                plot_bgcolor="white",
-                coloraxis_colorbar=dict(
-                    title="REGISTROS", 
-                    thickness=25, 
-                    len=0.5, 
-                    yanchor="middle", 
-                    y=0.5,
-                    xanchor="left",
-                    x=0.02
-                ),
-                autosize=True
-            )
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-        else:
-            st.error("⚠️ No se pudo cargar el mapa.")
-            st.dataframe(counts, use_container_width=True)
+        # Aquí puedes incrustar el mapa Leaflet interactivo mediante componentes HTML de Streamlit si prefieres el mapa de calor real, 
+        # o usar Plotly si manejas las coordenadas centrales de las comunas.
+        st.info("💡 Aquí puedes integrar tu componente Leaflet de mapa de calor por comunas para Pasto.")
+        
+        # Opcional: Gráfico de barras de densidad por comunas simulando el mapa de calor visual
+        fig_bar = px.bar(counts, x='ID_COMUNA', y='Registros', color='Registros',
+                         color_continuous_scale=[[0, '#FCE4EC'], [1, '#E91E63']],
+                         title="Concentración de Registros por Comuna")
+        fig_bar.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', height=400)
+        st.plotly_chart(fig_bar, use_container_width=True)
 
     with c_map_stats:
-        st.write("**🔥 Ranking Municipal**")
-        for _, row in counts.head(20).iterrows(): # Más municipios visibles
+        st.write("**🔥 Ranking Comunas**")
+        for _, row in counts.head(12).iterrows():
             st.markdown(f"""
                 <div class="rank-item" style="padding:8px; margin-bottom:6px; border-radius:12px;">
-                    <span style="font-weight:600; font-size:0.75rem;">{row['ID_MPIO']}</span>
+                    <span style="font-weight:600; font-size:0.75rem;">{row['ID_COMUNA']}</span>
                     <span class="hotspot-pill" style="font-size:0.7rem; padding:2px 8px;">{row['Registros']}</span>
                 </div>
             """, unsafe_allow_html=True)
         
         st.markdown("---")
-        st.metric("Municipios", f"{len(counts)}/42")
+        st.metric("Comunas", f"{len(counts)}/12")
 
     # --- LEADERBOARD ---
     st.markdown("---")
@@ -435,7 +366,7 @@ def view_busqueda():
     st.title("🔍 Explorador de Registros")
     df = get_data()
     if not df.empty:
-        q = st.text_input("Buscar por nombre, cédula o municipio...").upper()
+        q = st.text_input("Buscar por nombre, cédula o comuna...").upper()
         if q:
             res = df[df.astype(str).apply(lambda x: q in x.str.upper().values, axis=1)]
             st.dataframe(res, use_container_width=True, hide_index=True)
